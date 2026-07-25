@@ -1,0 +1,56 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # geng shells out to git for worktree isolation, so both OS families matter.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Hosted runners ship no git identity, and the isolation tests make real
+      # commits inside throwaway worktrees, so `git commit` would exit 128.
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@geng.test"
+          git config --global user.name "geng ci"
+          git config --global init.defaultBranch main
+
+      - name: Show versions
+        run: |
+          python --version
+          git --version
+
+      - name: Run test suite
+        run: python -m unittest discover tests -v
+
+      - name: Verify the zero-dependency example runs green
+        run: python geng.py run examples/smoke.toml
+
+  docs:
+    # The slide deck has measurable limits, so they are enforced, not trusted.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Audit the deck against published slide-design limits
+        run: python tools/audit_deck.py
