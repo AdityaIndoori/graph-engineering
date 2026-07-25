@@ -1,0 +1,77 @@
+# Harness adapter table.
+#
+# Every entry turns a prompt string into an argv. That is the ONLY thing geng
+# needs from your agent, which is why swapping harnesses is a one-line change.
+#
+# Copy the [agents.*] block you want into your own graph spec, or include this
+# whole file as a starting point.
+#
+# Flags below are from each vendor's official non-interactive docs. Two rules:
+#   1. The exit code is authoritative. JSON output is best-effort — Cursor emits
+#      no valid JSON on failure, Kiro and aider emit none at all.
+#   2. Opt out of ambient config in CI (--bare, --ignore-user-config) or a
+#      teammate's ~/.claude hook silently changes your results.
+
+[agents.claude]
+argv = ["claude", "-p", "--permission-mode", "acceptEdits", "--output-format", "text"]
+# add "--bare" in CI to skip hooks/skills/MCP/CLAUDE.md; recommended by Anthropic
+prompt_via = "arg"
+
+[agents.claude_ro]
+# Read-only reviewer. Capability restriction, not a polite instruction:
+# a node that cannot write cannot "helpfully" fix what it was asked to judge.
+argv = ["claude", "-p", "--allowedTools", "Read,Grep,Glob,Bash(git diff:*)", "--output-format", "text"]
+prompt_via = "arg"
+
+[agents.codex]
+# Progress goes to stderr, only the final message to stdout - cleanest to pipe.
+argv = ["codex", "exec", "--sandbox", "workspace-write", "--ask-for-approval", "never", "--skip-git-repo-check"]
+prompt_via = "arg"
+
+[agents.codex_ro]
+argv = ["codex", "exec", "--sandbox", "read-only", "--ask-for-approval", "never", "--skip-git-repo-check"]
+prompt_via = "arg"
+
+[agents.opencode]
+argv = ["opencode", "run", "--auto"]
+prompt_via = "arg"
+
+[agents.kiro]
+# --no-interactive requires the prompt as an argument. No JSON output mode.
+argv = ["kiro-cli", "chat", "--no-interactive", "--trust-tools=read,grep,write"]
+prompt_via = "arg"
+ok_exit = [0]   # documented: 0 ok, 1 general failure, 3 MCP startup failure
+
+[agents.gemini]
+argv = ["gemini", "-p"]
+prompt_via = "arg"
+ok_exit = [0]   # documented: 0 ok, 1 error, 42 bad input, 53 turn limit
+
+[agents.cursor]
+# Without -f, print mode proposes edits but does not apply them.
+argv = ["cursor-agent", "-p", "-f", "--output-format", "text"]
+prompt_via = "arg"
+
+[agents.amp]
+argv = ["amp", "-x"]
+prompt_via = "arg"
+
+[agents.aider]
+argv = ["aider", "--yes-always", "--no-auto-commits", "--message"]
+prompt_via = "arg"
+
+[agents.omp]
+argv = ["omp", "-p"]
+prompt_via = "arg"
+
+# ---------------------------------------------------------------------------
+# Non-agent nodes. The most valuable nodes in most graphs are not agents at all:
+# they are the deterministic checks that make an agent's claim falsifiable.
+
+[agents.shell]
+argv = ["bash", "-lc", "{prompt}"]
+prompt_via = "arg"
+
+[agents.pwsh]
+argv = ["powershell", "-NoProfile", "-Command", "{prompt}"]
+prompt_via = "arg"
