@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -25,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 import geng  # noqa: E402
 
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
 HAVE_GIT = shutil.which("git") is not None
 # `python` is not on PATH on many Linux distros; the specs under test use whatever
 # interpreter is running them, which is always correct.
@@ -46,14 +48,19 @@ class Base(unittest.TestCase):
         return f'[agents.py]\nargv = [{json.dumps(PY)}, "-c", "{{prompt}}"]\n'
 
     def run_cli(self, *args: str) -> tuple[int, str]:
-        """Invoke geng in-process, capturing stdout, exactly as the CLI would."""
+        """Invoke geng in-process, capturing stdout, exactly as the CLI would.
+
+        Colour codes are stripped so assertions match on words rather than on
+        terminal escapes: geng prints "<esc>skip<esc> after", which would defeat
+        a naive `assertIn("skip after", ...)` on any machine without NO_COLOR set.
+        """
         import io
         from contextlib import redirect_stdout, redirect_stderr
 
         buf = io.StringIO()
         with redirect_stdout(buf), redirect_stderr(buf):
             code = geng.main([*args])
-        return code, buf.getvalue()
+        return code, ANSI.sub("", buf.getvalue())
 
 
 class TestSpecValidation(Base):
