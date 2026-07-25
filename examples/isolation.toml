@@ -1,0 +1,69 @@
+# Regression test for `isolate = true`. Needs a throwaway git repo:
+#
+#   mkdir /tmp/iso && cd /tmp/iso && git init -q -b main .
+#   printf base > file.txt && git add -A && git commit -qm base
+#   cp .../examples/isolation.toml . && python .../geng.py run isolation.toml
+#
+# Expect 4/4 ok, exit 0, and collect.txt ending in
+#   "OK: isolation held, both branches carry their work"
+#
+# This graph caught a real bug: worktree edits were left uncommitted, so every
+# downstream reviewer node saw an empty diff.
+
+# Verifies the isolate=true path: two nodes editing THE SAME file in parallel.
+# Without worktrees they corrupt each other; with them each gets its own
+# checkout and branch, and both edits survive as commits on separate branches.
+#
+# Also exercises prompt_via = "stdin", {dep_branch}, and a node that changes
+# nothing (must record commit = null, not fail).
+
+[settings]
+default_agent = "py"
+max_parallel = 3
+base_ref = "main"
+
+[agents.py]
+argv = ["{python}", "-c", "{prompt}"]
+
+[agents.py_stdin]
+argv = ["{python}", "-"]
+prompt_via = "stdin"
+
+[nodes.alpha]
+isolate = true
+prompt = "open('file.txt','w').write('alpha wrote this'); print('alpha done')"
+
+[nodes.beta]
+isolate = true
+prompt = "open('file.txt','w').write('beta wrote this'); print('beta done')"
+
+[nodes.noop]
+isolate = true
+prompt = "print('noop changed nothing')"
+
+# Reads both branches back out of the real repo. Proves isolation held AND that
+# each branch actually carries the node's work.
+[nodes.collect]
+needs = ["alpha", "beta", "noop"]
+agent = "py_stdin"
+out = "collect.txt"
+gate = true
+prompt = """
+import subprocess, sys
+
+def show(ref):
+    r = subprocess.run(['git', 'show', ref + ':file.txt'], capture_output=True, text=True)
+    return r.stdout.strip()
+
+a, b, m = show('{alpha_branch}'), show('{beta_branch}'), show('main')
+print('{alpha_branch} ->', a)
+print('{beta_branch} ->', b)
+print('noop commit  -> {noop_commit!r}')
+print('main ->', m)
+
+bad = []
+if a != 'alpha wrote this': bad.append('alpha branch lost its edit')
+if b != 'beta wrote this':  bad.append('beta branch lost its edit')
+if m != 'base':             bad.append('main was mutated by an isolated node')
+sys.exit('FAIL: ' + '; '.join(bad)) if bad else print('OK: isolation held, both branches carry their work')
+"""

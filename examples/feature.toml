@@ -1,0 +1,113 @@
+# The pattern worth stealing: implement / verify / review as three nodes.
+#
+# Why three nodes instead of one prompt that says "implement it and check your
+# work": the implementer node has write tools, the verifier node is a real test
+# command, and the reviewer node has NO write tools at all. Capability is set
+# per node, so a reviewer physically cannot "helpfully" fix what it was asked to
+# judge, and the verifier's verdict is a process exit code rather than an
+# agent's opinion of itself.
+#
+# Cognition's production finding is the reason the reviewer gets a fresh
+# context: the review loop works best when the coding and review agents share
+# no context beforehand (cognition.com/blog/multi-agents-working).
+#
+#   python geng.py plan examples/feature.toml
+#   python geng.py run  examples/feature.toml --resume
+#
+# Swap the [agents.*] blocks to move the whole graph to another harness.
+
+[settings]
+default_agent = "claude"
+max_parallel = 3
+base_ref = "HEAD"
+
+[agents.claude]
+argv = ["claude", "-p", "--permission-mode", "acceptEdits", "--output-format", "text"]
+
+[agents.claude_ro]
+# Read-only by capability, not by instruction.
+argv = ["claude", "-p", "--allowedTools", "Read,Grep,Glob,Bash(git diff:*)", "--output-format", "text"]
+
+[agents.codex_ro]
+# A second opinion from a DIFFERENT model. Twenty agents on one model reading the
+# same flawed context will agree with each other at scale.
+argv = ["codex", "exec", "--sandbox", "read-only", "--ask-for-approval", "never", "--skip-git-repo-check"]
+
+[agents.shell]
+argv = ["{python}", "-c", "{prompt}"]
+
+# --- 1. plan ------------------------------------------------------------------
+
+[nodes.plan]
+agent = "claude_ro"
+out = "build/plan.md"
+timeout = 900
+prompt = """
+Read the codebase and write an implementation plan for: add structured
+request-id logging to the HTTP layer.
+Output markdown only: files to touch, the change per file, and the exact
+command that will prove it works. Do not edit any files.
+"""
+
+# --- 2. implement, isolated in its own git worktree ---------------------------
+# isolate = true gives this node `git worktree add` on its own branch, so a
+# parallel sibling cannot corrupt its checkout mid-edit.
+
+[nodes.implement]
+needs = ["plan"]
+isolate = true
+retries = 1
+timeout = 1800
+prompt = """
+Implement exactly this plan. Do not expand scope.
+
+{plan}
+"""
+
+# --- 3. verify: the grounding edge -------------------------------------------
+# This is the node that makes the graph honest. It is not an agent. It is the
+# test suite, and its exit code is the verdict. gate = true halts the graph.
+
+[nodes.verify]
+needs = ["implement"]
+agent = "shell"
+gate = true
+timeout = 600
+prompt = "import subprocess,sys; sys.exit(subprocess.run(['npm','test'],cwd=r'{implement_worktree}').returncode)"
+
+# --- 4. review: two independent readers, fresh context, no write tools -------
+# Both declare `implement` as a dependency purely to get {implement_branch} in
+# scope — geng refuses to substitute a placeholder from an undeclared edge.
+# The branch carries a real commit, so `git diff main...` has something to show.
+
+[nodes.review_self]
+needs = ["verify", "implement"]
+agent = "claude_ro"
+out = "build/review-claude.md"
+prompt = """
+Run `git diff main...{implement_branch}` and review that diff.
+Report only defects you can point at a line for: correctness, error handling,
+missed callsites. If you find none, say so plainly. Do not edit files.
+"""
+
+[nodes.review_cross]
+needs = ["verify", "implement"]
+agent = "codex_ro"
+out = "build/review-codex.md"
+prompt = """
+Run `git diff main...{implement_branch}` and review that diff.
+Report only defects you can point at a line for. Do not edit files.
+"""
+
+# --- 5. decide: a human node. Approval is a step, not a tool permission. -----
+
+[nodes.decide]
+needs = ["review_self", "review_cross", "implement"]
+agent = "shell"
+out = "build/decision.txt"
+prompt = """
+print('branch {implement_branch} ({implement_commit}) is green and reviewed twice.')
+print('claude review: {review_self_path}')
+print('codex  review: {review_cross_path}')
+print('merge with:  git merge {implement_branch}')
+"""

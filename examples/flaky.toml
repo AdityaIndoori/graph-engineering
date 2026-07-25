@@ -1,0 +1,115 @@
+# Use case 03 from pitch.html: hunt a flaky test.
+#
+# The case where you want DISAGREEMENT. One agent falls in love with its first
+# hypothesis; three racing read-only agents cannot. Note the graph is bookended
+# by the same deterministic check: it starts by proving the bug is real and ends
+# by proving it's gone. Neither verdict comes from an agent.
+#
+# Parallelise reading and verifying. Serialise writing and deciding.
+#
+#   python geng.py plan examples/flaky.toml
+
+[settings]
+default_agent = "reader"
+max_parallel = 3
+
+[agents.reader]
+argv = ["claude", "-p", "--allowedTools", "Read,Grep,Glob,Bash(git log:*)", "--output-format", "text"]
+
+[agents.reader_alt]
+# A second opinion from a different model, so a shared blind spot doesn't
+# become a unanimous verdict.
+argv = ["codex", "exec", "--sandbox", "read-only", "--ask-for-approval", "never", "--skip-git-repo-check"]
+
+[agents.dev]
+argv = ["claude", "-p", "--permission-mode", "acceptEdits", "--output-format", "text"]
+
+[agents.shell]
+argv = ["{python}", "-c", "{prompt}"]
+
+# --- wave 1: reproduce BEFORE theorising -------------------------------------
+# Exits 0 when the flake was observed. If the bug won't reproduce there is
+# nothing to fix, and the gate stops the graph before it burns tokens guessing.
+
+[nodes.repro]
+agent = "shell"
+gate = true
+timeout = 1800
+# NOTE: geng substitutes {placeholders}, so a literal brace for Python's own
+# f-strings must be doubled: {{i + 1}}. An unescaped brace is a hard error, not
+# a silent empty string.
+prompt = """
+import subprocess, sys
+for i in range(200):
+    if subprocess.run(['pytest', 'tests/test_sync.py', '-q']).returncode != 0:
+        print(f'flake reproduced on run {{i + 1}}')
+        sys.exit(0)
+sys.exit('200 clean runs: nothing to fix')
+"""
+
+# --- wave 2: competing hypotheses. Three readers, zero writers. --------------
+
+[nodes.h_timing]
+needs = ["repro"]
+prompt = """
+Hypothesis: an async/timing race in tests/test_sync.py.
+Cite file:line evidence for or against, then write VERDICT: LIKELY or RULED OUT.
+Do not edit files.
+"""
+
+[nodes.h_state]
+needs = ["repro"]
+agent = "reader_alt"
+prompt = """
+Hypothesis: leaked global or fixture state between tests.
+Cite file:line evidence, then write VERDICT: LIKELY or RULED OUT.
+Do not edit files.
+"""
+
+[nodes.h_git]
+needs = ["repro"]
+prompt = """
+Run `git log --oneline -20 -- tests/test_sync.py` and the modules it imports.
+Name the commit most likely to have introduced the flake, with reasoning.
+Do not edit files.
+"""
+
+# --- wave 3: one writer. Writes stay single-threaded. ------------------------
+
+[nodes.fix]
+needs = ["h_timing", "h_state", "h_git"]
+agent = "dev"          # the ONLY node in this graph with write access
+isolate = true
+retries = 1
+timeout = 1800
+prompt = """
+Three independent investigations, which may disagree:
+
+## timing
+{h_timing}
+
+## state
+{h_state}
+
+## history
+{h_git}
+
+Act on the hypothesis with the strongest cited evidence. Fix only that.
+If they conflict, say which you chose and why before editing.
+"""
+
+# --- wave 4: the same check, now inverted --------------------------------------
+
+[nodes.confirm]
+needs = ["fix"]
+agent = "shell"
+gate = true
+timeout = 1800
+prompt = """
+import subprocess, sys
+for i in range(200):
+    if subprocess.run(['pytest', 'tests/test_sync.py', '-q'],
+                      cwd=r'{fix_worktree}').returncode != 0:
+        sys.exit(f'still flaky on run {{i + 1}}')
+print('200/200 passing on branch {fix_branch}')
+"""
