@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Graph engineering for coding agents</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--
+  Design constraints are evidence-based, not taste:
+  - Sentence assertion headlines, not topic phrases. Alley et al.: 79% vs 69%
+    recall of the slide's own point (n~739, p<0.001).
+  - Mean <=21 words/slide. Garner & Alley's winning deck averaged 21.2; the
+    losing bullet deck averaged 41.5 (n=110, d=0.81).
+  - Zero bullet lists: they hide the relationships, which for a DAG ARE the content.
+  - Code >=24px (WCAG 1.4.3 "large scale" = 18pt = 24px), <=6 lines per pane.
+  - Diagram labels sit ON nodes (spatial contiguity, 22/22 tests, d=1.10).
+  - Progressive reveal (segmenting, 10/10 tests, d=0.79) via the Build button.
+  - Arrows/borders >=3:1 contrast (WCAG 1.4.11); text >=4.5:1.
+  Long prose lives in speaker notes (press N), never on the slide.
+-->
+<style>
+  :root{
+    --bg:#0d1117; --ink:#f0f6fc; --dim:#c9d1d9;
+    --acc:#79c0ff; --ok:#56d364; --gate:#e3b341; --bad:#ff7b72;
+    /* #8b949e on #0d1117 = 6.4:1; #6e7681 failed at 4.12:1 */
+    --mute:#8b949e;
+    /* #57606a arrows = 3.2:1, clears the 3:1 non-text floor (#3d4753 was 2.0:1) */
+    --edge:#7d8590;
+    --mono:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{background:var(--bg);color:var(--ink);
+    font:400 16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif}
+
+  section{
+    position:absolute;inset:0;display:none;
+    flex-direction:column;justify-content:center;
+    padding:5vh 6vw 11vh;
+  }
+  section.on{display:flex}
+
+  /* Assertion headline: a full sentence, upper-left, <=2 lines. */
+  h1{
+    font-size:clamp(26px,3.5vw,46px);line-height:1.15;letter-spacing:-.02em;
+    margin:0 0 .8em;max-width:30ch;font-weight:600;
+  }
+  h1 em{font-style:normal;color:var(--acc)}
+  h1 b{font-weight:600;color:var(--ok)}
+  .evidence{display:flex;gap:clamp(18px,3vw,44px);align-items:center;flex-wrap:wrap}
+  .col{flex:1 1 340px;min-width:0}
+
+  /* Code = evidence for one assertion. 24px floor, <=6 lines. */
+  pre{
+    /* 24px = 18pt = WCAG 1.4.3 "large scale"; the vw term must clear it on a
+       1440px-wide projector, so 1.75vw = 25.2px there. */
+    margin:0;font-family:var(--mono);font-size:clamp(17px,1.75vw,26px);
+    line-height:1.5;background:#010409;border:1px solid #30363d;
+    border-left:3px solid var(--acc);border-radius:8px;padding:.7em .9em;
+    overflow:visible;
+  }
+  pre b{color:var(--acc);font-weight:600}
+  pre u{color:var(--gate);text-decoration:none;font-weight:600}
+  pre i{color:var(--mute);font-style:normal}
+
+  /* Diagram: labels ON the node. */
+  .g{display:flex;flex-direction:column;gap:9px;font-family:var(--mono)}
+  .row{display:flex;gap:9px}
+  .n{
+    flex:1;padding:.55em .7em;border-radius:7px;text-align:center;
+    font-size:clamp(14px,1.35vw,21px);background:#161b22;
+    border:1.5px solid var(--edge);color:var(--ink);
+    opacity:0;transform:translateY(6px);transition:opacity .35s,transform .35s;
+  }
+  .n.vis{opacity:1;transform:none}
+  .n small{display:block;font-size:.72em;color:var(--mute);margin-top:.25em}
+  .n.gate{border-color:var(--gate);border-style:dashed;background:#1c1810}
+  .n.gate small{color:var(--gate)}
+  .n.ro{border-color:var(--acc);background:#0d1c26}
+  .n.ro small{color:var(--acc)}
+  .n.you{border-color:#a371f7;background:#17131f}
+  .arrow{text-align:center;color:var(--edge);font-size:14px;line-height:1;
+    opacity:0;transition:opacity .35s}
+  .arrow.vis{opacity:1}
+
+  .big{font-size:clamp(30px,5vw,64px);font-weight:600;letter-spacing:-.02em;line-height:1.1}
+  .big span{display:block;font-size:.34em;color:var(--mute);font-weight:400;
+    letter-spacing:.02em;margin-top:.5em;line-height:1.4}
+  .split{display:flex;gap:clamp(20px,4vw,60px);flex-wrap:wrap}
+  .half{flex:1 1 300px}
+  .half h2{font:600 clamp(15px,1.5vw,21px)/1.3 inherit;margin:0 0 .7em;color:var(--mute)}
+  .half.bad h2{color:var(--bad)}
+  .half.good h2{color:var(--ok)}
+  .three{display:flex;gap:clamp(14px,2.5vw,34px);flex-wrap:wrap}
+  .three div{flex:1 1 190px;font-size:clamp(15px,1.5vw,22px);
+    padding-left:.7em;border-left:3px solid var(--edge)}
+  .three b{display:block;color:var(--acc);font-size:.8em;
+    text-transform:uppercase;letter-spacing:.1em;margin-bottom:.3em}
+
+  /* Speaker notes: the relocated prose. Hidden by default (press N). */
+  #notes{
+    position:fixed;left:0;right:0;bottom:56px;max-height:42vh;overflow-y:auto;
+    background:#161b22;border-top:2px solid var(--acc);padding:16px 6vw;
+    font-size:15px;line-height:1.6;color:var(--dim);display:none;
+  }
+  #notes.on{display:block}
+  #notes p{margin:0 0 .7em;max-width:80ch}
+  #notes strong{color:var(--ink)}
+
+  nav{
+    position:fixed;bottom:0;left:0;right:0;height:52px;
+    display:flex;align-items:center;gap:12px;padding:0 6vw;
+    font:13px/1 var(--mono);color:var(--mute);
+    background:var(--bg);border-top:1px solid #30363d;
+  }
+  nav button{
+    font:inherit;background:#21262d;color:var(--ink);border:1px solid var(--edge);
+    border-radius:6px;padding:9px 14px;cursor:pointer;min-height:38px;min-width:38px;
+  }
+  nav button:hover{border-color:var(--acc);color:var(--acc)}
+  nav button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+  #build[hidden]{display:none}
+  .count{margin-left:auto}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<!-- 1 ---------------------------------------------------------------------->
+<section class=on data-notes="Graph engineering is the July 2026 name for running coding agents as a directed graph instead of one iterative loop. The term is about a week old and came from a tweet; the structure is 19 months older, and Anthropic ships it as 'dynamic workflows' without ever using the word 'graph'. So: treat the label as a rename, and judge it on the one idea inside it that is genuinely new.">
+  <p class=big>One loop does everything.<br>A graph decides <em style="color:var(--acc);font-style:normal">who may do what</em>.
+    <span>Graph engineering for coding agents &mdash; on any harness you already use.</span></p>
+</section>
+
+<!-- 2 ---------------------------------------------------------------------->
+<section data-notes="Vocabulary first, before any mechanics — pre-training principle, 13 of 16 tests, median d=0.75. Three words carry the whole talk. A node is one invocation of an agent CLI as a subprocess. An edge is a file on disk: the upstream node's stdout, which gets substituted into the downstream node's prompt. And the contract between them is the process exit code, not parsed output — because only Gemini and Kiro publish exit-code tables, Cursor emits no valid JSON at all on failure, and aider has no JSON mode.">
+  <h1>Three words carry this whole idea.</h1>
+  <div class=three>
+    <div><b>node</b>An agent CLI as a subprocess.</div>
+    <div><b>edge</b>A file: stdout &rarr; prompt.</div>
+    <div><b>contract</b>The exit code.</div>
+  </div>
+</section>
+
+<!-- 3 ---------------------------------------------------------------------->
+<section data-notes="Both architectures side by side on ONE slide, because the comparison is the argument and Tufte's point is that relevant evidence must sit adjacent within the eyespan — putting these on consecutive slides makes the audience diff them from memory. Left: one agent, one context window, ten jobs. By file 30 it has forgotten file 3, and it grades its own homework. Right: the same work as four nodes, each with a clean window, and a gate that is a test command rather than an opinion.">
+  <h1>The loop grades its own homework.</h1>
+  <div class=split>
+    <div class="half bad">
+      <h2>One loop</h2>
+      <div class=g>
+        <div class=row><div class="n vis">agent<small>plans, writes, judges</small></div></div>
+        <div class="arrow vis">&#8635; until done</div>
+      </div>
+    </div>
+    <div class="half good">
+      <h2>A graph</h2>
+      <div class=g>
+        <div class=row><div class="n vis">plan<small>read-only</small></div><div class="n vis">write<small>worktree</small></div></div>
+        <div class="arrow vis">&darr;</div>
+        <div class=row><div class="n gate vis">npm test<small>exit code rules</small></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 ---------------------------------------------------------------------->
+<section data-notes="Use case one: shipping a feature you would actually merge. Watch what each node is ALLOWED to do, not what it is asked to do. The planner has no write tools. The implementer works in its own git worktree, so a sibling cannot corrupt its checkout. Then the gate: not an agent, the test suite — it cannot be talked out of failing. Only then two reviewers, also with no write tools, one of them on a different model so a shared blind spot does not become a unanimous verdict. Cognition found in production that review works best when the coder and reviewer share no context beforehand.">
+  <h1>Capability per node is the point, not parallelism.</h1>
+  <div class=evidence>
+    <div class=col>
+      <div class=g data-build>
+        <div class=row><div class="n ro">plan<small>read-only</small></div></div>
+        <div class=arrow>&darr;</div>
+        <div class=row><div class=n>implement<small>worktree</small></div></div>
+        <div class=arrow>&darr;</div>
+        <div class=row><div class="n gate">npm test<small>gate</small></div></div>
+        <div class=arrow>&darr; &nbsp; &darr;</div>
+        <div class=row><div class="n ro">review<small>model A</small></div><div class="n ro">review<small>model B</small></div></div>
+      </div>
+    </div>
+    <div class=col>
+      <pre><b>[nodes.verify]</b>
+needs = ["implement"]
+agent = "shell"
+<u>gate  = true</u>
+prompt = "npm test"</pre>
+    </div>
+  </div>
+</section>
+
+<!-- 5 ---------------------------------------------------------------------->
+<section data-notes="Use case two: a rename across forty files. This is the case where fan-out is not a fashion statement, because the work is genuinely independent. One rule makes it safe: one file, one owner. Never let two nodes edit the same file — practitioners converge on three to eight parallel agents before they lose the ability to review the result. isolate = true gives each node its own git worktree and branch, and commits its work only if it succeeded, so a failed node never publishes something that looks reviewable. Then one barrier proves the whole repo still compiles before anything merges.">
+  <h1>Isolation makes parallel writes safe.</h1>
+  <div class=evidence>
+    <div class=col>
+      <div class=g data-build>
+        <div class=row>
+          <div class=n>pkg/api<small>branch geng/api</small></div>
+          <div class=n>pkg/web<small>branch geng/web</small></div>
+          <div class=n>pkg/cli<small>branch geng/cli</small></div>
+        </div>
+        <div class=arrow>&darr; &nbsp; &darr; &nbsp; &darr;</div>
+        <div class=row><div class="n gate">typecheck + test<small>one barrier for all three</small></div></div>
+      </div>
+    </div>
+    <div class=col>
+      <pre><b>[nodes.api]</b>
+<u>isolate = true</u> <i># own worktree</i>
+cwd     = "packages/api"</pre>
+    </div>
+  </div>
+</section>
+
+<!-- 6 ---------------------------------------------------------------------->
+<section data-notes="Use case three: hunting a flaky test. Here you actively want disagreement, because one agent falls in love with its first hypothesis. Note the shape: the graph is bookended by the same deterministic check. It opens by running the test two hundred times to prove the bug is real — if it will not reproduce, the gate stops the graph before you burn tokens theorising. Then three read-only investigators race on two different models. Then exactly one writer. Then the same check inverted, to prove it is gone. Parallelise reading and verifying; serialise writing and deciding.">
+  <h1>Parallelise reading. Serialise writing.</h1>
+  <div class=evidence>
+    <div class=col>
+      <div class=g data-build>
+        <div class=row><div class="n gate">repro &times;200<small>gate: bug is real</small></div></div>
+        <div class=arrow>&darr; &nbsp; &darr; &nbsp; &darr;</div>
+        <div class=row>
+          <div class="n ro">timing<small>read-only</small></div>
+          <div class="n ro">state</div>
+          <div class="n ro">git log</div>
+        </div>
+        <div class=arrow>&darr;</div>
+        <div class=row><div class=n>fix<small>only writer</small></div></div>
+        <div class=arrow>&darr;</div>
+        <div class=row><div class="n gate">repro &times;200<small>gate: bug is gone</small></div></div>
+      </div>
+    </div>
+    <div class=col>
+      <pre><b>[nodes.fix]</b>
+needs = ["timing","state","git"]
+prompt = """
+Strongest evidence wins:
+{timing}
+{state}"""</pre>
+    </div>
+  </div>
+</section>
+
+<!-- 7 ---------------------------------------------------------------------->
+<section data-notes="Portability. Harness-native graphing does not travel: Claude Code dynamic workflows resume only inside the same session, Kiro's wave scheduler is locked to tasks.md in the IDE, and LangGraph needs your orchestrator in the same Python process. What every harness DOES expose is a non-interactive command and an exit code. So the adapter is one line, and moving a whole graph to another vendor is editing that line. A read-only reviewer is also just an adapter — capability, not instruction.">
+  <h1>Switching harness is one line.</h1>
+  <pre><b>[agents.dev]</b>
+argv = ["claude", "-p"]          <i># Claude Code</i>
+argv = ["codex", "exec"]         <i># Codex</i>
+argv = ["opencode", "run"]       <i># OpenCode</i>
+argv = ["kiro-cli", "chat"]      <i># Kiro</i>
+argv = ["gemini", "-p"]          <i># Gemini</i></pre>
+</section>
+
+<!-- 8 ---------------------------------------------------------------------->
+<section data-notes="When NOT to do this, which is most of the time. Three triggers only: context rot, where one agent's window is hitting 300 to 500 thousand tokens per iteration; a need for independent review, where the stakes are high enough that the author must not be the judge; and wall-clock, where genuinely independent subtasks are running in sequence. Otherwise keep your loop. The costs are real and measured: agents burn about four times chat tokens, multi-agent about fifteen times, and Anthropic itself says most coding tasks have fewer truly parallelisable parts than research does.">
+  <h1>Three triggers justify a graph. Otherwise, don't.</h1>
+  <div class=three>
+    <div><b>context rot</b>Past 300k tokens.</div>
+    <div><b>independent review</b>Author must not judge.</div>
+    <div><b>wall-clock</b>Serial independent work.</div>
+  </div>
+  <p style="font-size:clamp(16px,1.6vw,23px);color:var(--mute);margin:1.6em 0 0">
+    Multi-agent burns <b style="color:var(--bad);font-weight:600">15&times;</b> the tokens.</p>
+</section>
+
+<!-- 9 ---------------------------------------------------------------------->
+<section data-notes="If you remember one thing. The value of a graph is not that things run at the same time. It is that a step which cannot write cannot break anything, and a gate that is not an agent cannot be argued with. Everything else about this topic is a rename. geng is on GitHub: one file, standard library only, drop it next to a repo and it works with the agent you already have.">
+  <p class=big>A step that can't write<br><b>can't break anything</b>.
+    <span>A gate that isn't an agent can't be argued with.<br>
+    Everything else is a rename.</span></p>
+</section>
+
+<nav>
+  <button id=prev aria-label="Previous slide">&larr;</button>
+  <button id=next aria-label="Next slide">&rarr;</button>
+  <button id=build>Build &crarr;</button>
+  <button id=notesBtn aria-label="Toggle speaker notes">Notes (N)</button>
+  <span class=count id=pos></span>
+</nav>
+<div id=notes aria-live=polite></div>
+
+<script>
+  const slides = [...document.querySelectorAll('section')];
+  const notes = document.getElementById('notes');
+  const buildBtn = document.getElementById('build');
+  let i = 0, step = 0;
+
+  // Progressive reveal: each .n / .arrow inside [data-build] appears on demand,
+  // so narration and visual land together (temporal contiguity, d=1.22).
+  const parts = s => [...s.querySelectorAll('[data-build] .n, [data-build] .arrow')];
+
+  function paint() {
+    const s = slides[i];
+    const p = parts(s);
+    p.forEach((el, n) => el.classList.toggle('vis', n < step));
+    buildBtn.hidden = p.length === 0;
+    buildBtn.textContent = step >= p.length ? 'Built' : `Build ${step}/${p.length}`;
+    document.getElementById('pos').textContent = `${i + 1} / ${slides.length}`;
+    notes.innerHTML = `<p>${s.dataset.notes || 'No notes.'}</p>`;
+  }
+  function go(n, atEnd) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('on', k === i));
+    step = atEnd ? parts(slides[i]).length : 0;
+    paint();
+  }
+  function advance() {
+    // Walk the build first; only then move to the next slide.
+    if (step < parts(slides[i]).length) { step++; paint(); } else go(i + 1);
+  }
+  function back() {
+    if (step > 0 && parts(slides[i]).length) { step--; paint(); }
+    else go(i - 1, true);
+  }
+  document.getElementById('next').onclick = advance;
+  document.getElementById('prev').onclick = back;
+  buildBtn.onclick = advance;
+  document.getElementById('notesBtn').onclick = () => notes.classList.toggle('on');
+  addEventListener('keydown', e => {
+    if (e.target.tagName === 'BUTTON' && e.key === ' ') return;
+    if (['ArrowRight', ' ', 'PageDown', 'Enter'].includes(e.key)) { e.preventDefault(); advance(); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); back(); }
+    else if (e.key === 'n' || e.key === 'N') notes.classList.toggle('on');
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (/^[1-9]$/.test(e.key)) go(+e.key - 1);
+  });
+  go(0);
+</script>
