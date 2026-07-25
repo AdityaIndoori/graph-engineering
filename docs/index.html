@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>geng — a DAG runner for AI coding agents</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Run AI coding agents as a graph, not a loop. A node is a subprocess, an edge is a file, the exit code is the contract. One file, no dependencies, any agent CLI.">
+<link rel="canonical" href="https://graphengineering.aindoori.com/">
+<meta property="og:title" content="geng — a DAG runner for AI coding agents">
+<meta property="og:description" content="A node is a subprocess. An edge is a file. The exit code is the contract.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://graphengineering.aindoori.com/">
+<!--
+  Zero JS beyond one copy button, zero network requests, zero webfonts.
+  Everything below the surface is deliberate:
+   - system font stack: no CLS from font swap, no third-party request
+   - contrast: body 13.9:1, muted 6.4:1, borders 3.2:1 (WCAG 2.2 AA needs
+     4.5:1 text / 3:1 non-text)
+   - body 18px, line length capped at ~72ch
+   - prefers-color-scheme and prefers-reduced-motion respected
+   - tap targets >=44px
+-->
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f6f8fa; --ink:#1f2328; --dim:#59636e;
+    --line:#d1d9e0; --acc:#0550ae; --ok:#1a7f37; --gate:#9a6700; --bad:#cf222e;
+    /* A link colour and a button background are different jobs: reusing one for
+       both puts white text on a light accent in dark mode (1.95:1). */
+    --btn:#0550ae; --btn-ink:#ffffff; --rule:#8c959f;
+    --code-bg:#0d1117; --code-ink:#e6edf3;
+    --mono:ui-monospace,"Cascadia Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1117; --panel:#151b23; --ink:#f0f6fc; --dim:#9198a1;
+      --line:#3d444d; --acc:#79c0ff; --ok:#3fb950; --gate:#d29922; --bad:#ff7b72;
+      --btn:#1f6feb; --btn-ink:#ffffff; --rule:#8b949e;
+      --code-bg:#010409; --code-ink:#e6edf3;
+    }
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font:18px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:74ch;margin:0 auto;padding:0 20px}
+  a{color:var(--acc)}
+  a:focus-visible,button:focus-visible{outline:2px solid var(--acc);outline-offset:2px;border-radius:4px}
+
+  .skip{position:absolute;left:-9999px;top:0;background:var(--acc);color:#fff;
+    padding:12px 18px;z-index:10}
+  .skip:focus{left:0}
+
+  header{border-bottom:1px solid var(--line);padding:14px 0}
+  header .wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .brand{font:600 20px/1 var(--mono);letter-spacing:-.02em}
+  .ver{font:12px/1 var(--mono);color:var(--dim);border:1px solid var(--line);
+    padding:5px 8px;border-radius:20px}
+  header nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+  header nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;
+    text-decoration:none;font-size:15px;border-radius:6px}
+  header nav a:hover{background:var(--panel)}
+
+  h1{font-size:clamp(30px,5.2vw,46px);line-height:1.14;letter-spacing:-.025em;
+    margin:0 0 .45em;font-weight:650}
+  h2{font-size:clamp(22px,3vw,29px);line-height:1.25;letter-spacing:-.02em;
+    margin:2.6em 0 .6em;font-weight:650;scroll-margin-top:20px}
+  h3{font-size:17px;margin:1.8em 0 .5em}
+  .lede{font-size:clamp(18px,2.1vw,21px);color:var(--dim);margin:0 0 1.5em}
+  p{margin:0 0 1em}
+
+  pre{
+    background:var(--code-bg);color:var(--code-ink);border-radius:10px;
+    padding:16px 18px;overflow-x:auto;margin:0 0 1.2em;
+    font-family:var(--mono);font-size:14.5px;line-height:1.6;
+    border:1px solid var(--line);
+  }
+  pre b{color:#79c0ff;font-weight:600}
+  pre u{color:#d29922;text-decoration:none;font-weight:600}
+  pre i{color:#9198a1;font-style:normal}
+  pre s{color:#3fb950;text-decoration:none}
+  code{font-family:var(--mono);font-size:.88em;background:var(--panel);
+    border:1px solid var(--line);border-radius:5px;padding:.1em .35em}
+  pre code{background:none;border:0;padding:0;font-size:inherit}
+
+  .copywrap{position:relative}
+  .copywrap button{
+    position:absolute;top:8px;right:8px;min-height:44px;min-width:56px;
+    padding:6px 12px;
+    font:12px/1 var(--mono);background:#21262d;color:#e6edf3;
+    /* #6e7781 on #21262d = 3.16:1, clearing the 3:1 control-boundary floor */
+    border:1px solid #6e7781;border-radius:6px;cursor:pointer;
+  }
+  .copywrap button:hover{border-color:#79c0ff;color:#79c0ff}
+
+  .cta{display:flex;gap:12px;flex-wrap:wrap;margin:1.5em 0 0}
+  .cta a{
+    display:inline-flex;align-items:center;min-height:48px;padding:0 22px;
+    border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;
+  }
+  .cta .primary{background:var(--btn);color:var(--btn-ink)}
+  .cta .primary:hover{filter:brightness(1.12)}
+  .cta .secondary{border:1px solid var(--line);color:var(--ink)}
+  .cta .secondary:hover{background:var(--panel)}
+
+  dl{margin:0}
+  dt{font-weight:650;margin:1.3em 0 .2em}
+  dt:first-child{margin-top:0}
+  dd{margin:0;color:var(--dim)}
+
+  table{border-collapse:collapse;width:100%;font-size:15.5px;margin:0 0 1.2em;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim)}
+  td code{white-space:nowrap}
+
+  .note{border-left:3px solid var(--gate);background:var(--panel);
+    padding:14px 18px;border-radius:0 8px 8px 0;margin:0 0 1.2em}
+  .note strong{color:var(--gate)}
+  .good{border-left-color:var(--ok)}
+  .good strong{color:var(--ok)}
+
+  ol.steps{padding-left:1.3em}
+  ol.steps li{margin:0 0 1.4em}
+  ol.steps strong{display:block;margin-bottom:.4em}
+
+  footer{border-top:1px solid var(--line);margin-top:4em;padding:26px 0 40px;
+    color:var(--dim);font-size:15px}
+  footer a{color:var(--acc)}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to main content</a>
+
+<header>
+  <div class="wrap">
+    <span class="brand">geng</span>
+    <span class="ver">~550 lines &middot; stdlib only</span>
+    <nav aria-label="Primary">
+      <a href="#quickstart">Quickstart</a>
+      <a href="#harness">Harnesses</a>
+      <a href="#when-not">When not to</a>
+      <a href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<div class="wrap">
+
+  <h1>Run coding agents as a graph, not a loop.</h1>
+  <p class="lede">A node is a subprocess. An edge is a file. The exit code is the
+  contract. Works with the agent CLI you already have &mdash; Claude Code, Codex,
+  OpenCode, Kiro, Gemini, Cursor, Amp or aider.</p>
+
+  <div class="copywrap">
+<pre><code>curl -O https://raw.githubusercontent.com/AdityaIndoori/graph-engineering/main/geng.py
+python geng.py run examples/smoke.toml</code></pre>
+    <button type="button" data-copy>Copy</button>
+  </div>
+
+  <div class="cta">
+    <a class="primary" href="https://github.com/AdityaIndoori/graph-engineering">View on GitHub</a>
+    <a class="secondary" href="#quickstart">Run it in 60 seconds</a>
+  </div>
+
+  <h2 id="example">This is the whole idea</h2>
+  <p>Two nodes. The first has an agent and write access. The second is a test
+  command whose exit code decides whether the work was any good.</p>
+
+<pre><b>[agents.dev]</b>
+argv = ["claude", "-p", "--permission-mode", "acceptEdits"]
+
+<b>[nodes.implement]</b>
+agent   = "dev"
+<u>isolate = true</u>                  <i># its own git worktree and branch</i>
+prompt  = "Add request-id logging to the HTTP layer."
+
+<b>[nodes.verify]</b>
+needs  = ["implement"]
+agent  = "shell"
+<u>gate   = true</u>                   <i># a failure here halts the graph</i>
+prompt = "npm test"</pre>
+
+<pre><i>$ python geng.py run graph.toml</i>
+
+wave 1  (1 node(s), 4 at a time)
+  <s>ok</s>   implement
+wave 2  (1 node(s), 4 at a time)
+  <s>ok</s>   verify
+
+2/2 ok, 0 failed, 0 skipped</pre>
+
+  <p>Swap <code>claude -p</code> for <code>codex exec</code> and nothing else
+  changes. That one line is the whole portability story.</p>
+
+  <h2 id="mechanics">What it actually does</h2>
+  <dl>
+    <dt>The exit code is authoritative, never parsed output</dt>
+    <dd>Only Gemini and Kiro publish exit-code tables. Cursor emits no valid JSON
+    at all when it fails; Kiro and aider have no JSON mode. A runner that parses
+    stdout to decide success is broken on arrival.</dd>
+
+    <dt>Files carry state between nodes, not context windows</dt>
+    <dd>Each node's stdout lands in <code>.geng/out/&lt;node&gt;.txt</code> and is
+    substituted into dependent prompts as <code>{node}</code>. Referencing a node
+    you did not declare is a hard error, so the graph cannot lie about what flows
+    where.</dd>
+
+    <dt>Isolated nodes get their own git worktree and branch</dt>
+    <dd>Two nodes can edit the same file concurrently without touching each other
+    or your checkout. Work is committed only if the node succeeded, so a failed
+    half-edit can never look like something reviewable.</dd>
+
+    <dt>Resume is keyed on content</dt>
+    <dd><code>sha256(id + prompt + argv + upstream keys)</code>. Edit one prompt
+    and <code>--resume</code> re-runs exactly that node and its dependents.</dd>
+
+    <dt>Gates are commands, not opinions</dt>
+    <dd>A gate node runs your test suite, type checker or linter. It cannot be
+    argued out of failing, and it stops the graph when it does.</dd>
+
+    <dt>One file, no dependencies</dt>
+    <dd>Python 3.11+ standard library only. Drop it next to a repo, delete it when
+    you are done. There is deliberately no <code>pip install</code>.</dd>
+  </dl>
+
+  <h2 id="harness">Use the harness you already have</h2>
+  <p>Every one of these exposes a non-interactive command and an exit code, which
+  is all geng needs.</p>
+
+  <table>
+    <thead><tr><th>Harness</th><th>Adapter argv</th></tr></thead>
+    <tbody>
+      <tr><td>Claude Code</td><td><code>["claude", "-p"]</code></td></tr>
+      <tr><td>OpenAI Codex</td><td><code>["codex", "exec"]</code></td></tr>
+      <tr><td>OpenCode</td><td><code>["opencode", "run", "--auto"]</code></td></tr>
+      <tr><td>Kiro CLI</td><td><code>["kiro-cli", "chat", "--no-interactive"]</code></td></tr>
+      <tr><td>Gemini CLI</td><td><code>["gemini", "-p"]</code></td></tr>
+      <tr><td>Cursor</td><td><code>["cursor-agent", "-p", "-f"]</code></td></tr>
+      <tr><td>Amp</td><td><code>["amp", "-x"]</code></td></tr>
+      <tr><td>aider</td><td><code>["aider", "--yes-always", "--message"]</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note good"><strong>A read-only reviewer is an adapter, not an
+  instruction.</strong> A node given no write tools cannot &ldquo;helpfully&rdquo;
+  fix the thing it was asked to judge &mdash;
+  <code>["claude","-p","--allowedTools","Read,Grep,Glob"]</code>.</div>
+
+  <h2 id="when-not">When not to use this</h2>
+  <p>Most work does not need a graph, and on this point the people selling the idea
+  agree with the sceptics. Reach for one on exactly three triggers:</p>
+  <dl>
+    <dt>1. Context rot</dt>
+    <dd>A single agent's window is hitting 300&ndash;500k tokens per iteration.</dd>
+    <dt>2. Independent review</dt>
+    <dd>The stakes are high enough that the author must not be the judge.</dd>
+    <dt>3. Wall-clock</dt>
+    <dd>Genuinely independent subtasks are running one after another.</dd>
+  </dl>
+  <div class="note"><strong>Otherwise, keep your loop.</strong> A graph costs you
+  three prompts to maintain instead of one, a state schema between nodes, and a new
+  class of routing bugs. Agents burn roughly 4&times; the tokens of chat and
+  multi-agent systems roughly 15&times;. Anthropic's own guidance: <em>&ldquo;most
+  coding tasks involve fewer truly parallelizable tasks than research.&rdquo;</em>
+  Your review bandwidth, not the tool's concurrency limit, is the real ceiling.</div>
+
+  <h2 id="quickstart">Run it in 60 seconds</h2>
+  <p>You do not need an AI agent installed. The bundled example uses Python
+  subprocesses as its agents, so it runs anywhere.</p>
+  <ol class="steps">
+    <li><strong>Clone and run</strong>
+      <div class="copywrap">
+<pre><code>git clone https://github.com/AdityaIndoori/graph-engineering
+cd graph-engineering
+python geng.py run examples/smoke.toml</code></pre>
+        <button type="button" data-copy>Copy</button>
+      </div>
+      You should see <code>6/6 ok, 0 failed, 0 skipped</code>. Three nodes ran in
+      parallel, a fourth joined their output, a gate checked it, and a deliberately
+      flaky node retried until it passed.
+    </li>
+    <li><strong>Run it again, cached</strong>
+      <div class="copywrap">
+<pre><code>python geng.py run examples/smoke.toml --resume</code></pre>
+        <button type="button" data-copy>Copy</button>
+      </div>
+      Every node reports <code>cached</code>, in about a fifth of a second. Change
+      one prompt and only that node and its dependents re-run.
+    </li>
+    <li><strong>See the shape without executing anything</strong>
+      <div class="copywrap">
+<pre><code>python geng.py plan examples/smoke.toml</code></pre>
+        <button type="button" data-copy>Copy</button>
+      </div>
+      Prints a Mermaid diagram plus the execution waves. <code>--dry-run</code>
+      shows the exact argv each node would execute, and changes nothing.
+    </li>
+  </ol>
+
+  <h2 id="examples">Three worked examples</h2>
+  <dl>
+    <dt>Ship a feature you would actually merge</dt>
+    <dd>plan (read-only) &rarr; implement (own worktree) &rarr; <strong>test suite
+    as a gate</strong> &rarr; two reviewers on different models &rarr; you decide.</dd>
+    <dt>A rename across many packages</dt>
+    <dd>Three isolated nodes, one owner per package, one
+    <code>typecheck &amp;&amp; test</code> barrier, then a read-only audit for
+    missed callsites.</dd>
+    <dt>Hunt a flaky test</dt>
+    <dd>Reproduce &times;200 as a gate <em>before</em> theorising, three competing
+    read-only hypotheses, one writer, then the same check inverted to prove it is
+    gone.</dd>
+  </dl>
+  <p>The last two show the shape worth internalising:
+  <strong>parallelise reading and verifying, serialise writing and deciding.</strong></p>
+  <div class="cta">
+    <a class="secondary" href="pitch.html">Nine-slide walkthrough</a>
+    <a class="secondary" href="https://github.com/AdityaIndoori/graph-engineering/tree/main/examples">Read the specs</a>
+  </div>
+
+  <h2 id="proof">Proof, not claims</h2>
+  <p>49 tests run on Linux, macOS and Windows across Python 3.11&ndash;3.13. They
+  assert the properties that would otherwise just be marketing:</p>
+  <ul>
+    <li>editing one prompt invalidates that node <strong>and its descendants</strong>, nothing else</li>
+    <li>a failed gate halts the graph; dependents are skipped, not silently run</li>
+    <li>two isolated nodes writing the same file commit to separate branches while
+      the main checkout stays untouched</li>
+    <li>a failed isolated node publishes <strong>no</strong> commit</li>
+    <li>a second concurrent run is refused rather than corrupting shared state</li>
+    <li><code>--dry-run</code> creates no artifacts, no state and no worktrees</li>
+  </ul>
+  <p><a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/tests/test_geng.py">Read the suite</a>
+  &middot; <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/geng.py">read the whole tool</a>
+  &mdash; it is one file, and short enough to audit in a sitting.</p>
+
+  <h2 id="faq">Questions you are probably about to ask</h2>
+  <dl>
+    <dt>Is &ldquo;graph engineering&rdquo; just a rename?</dt>
+    <dd>Mostly, yes. The term is days old and came from a tweet; the structure is
+    19 months older, and Anthropic ships it as &ldquo;dynamic workflows&rdquo;
+    without using the word. The one genuinely new part is setting an agent's
+    <em>capabilities</em> per node.
+    <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/BACKGROUND.md">Full background</a>.</dd>
+
+    <dt>Why not LangGraph, Temporal, Make or GitHub Actions?</dt>
+    <dd>Use them if you already run them &mdash; they are all more capable. geng
+    exists because none of them is a single file you drop next to a repo with no
+    infrastructure at all.</dd>
+
+    <dt>Do I need git?</dt>
+    <dd>Only for <code>isolate = true</code> nodes. Everything else works without
+    it, and the test suite skips the git tests when it is absent.</dd>
+
+    <dt>Why is there no <code>pip install</code>?</dt>
+    <dd>Because the pitch is one file with no dependencies. Publishing a package
+    would contradict it.</dd>
+
+    <dt>Can it run agents from different vendors in one graph?</dt>
+    <dd>Yes, and that is the point of the review nodes. Define two adapters and
+    give one node each &mdash; a second model is the cheapest defence against
+    correlated error.</dd>
+
+    <dt>Is a graph spec safe to run from someone else?</dt>
+    <dd>No more than a Makefile is. A spec is executable code; treat it that way.
+    See <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/SECURITY.md">SECURITY.md</a>.</dd>
+  </dl>
+
+</div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>geng</strong> &mdash; MIT licensed, by
+    <a href="https://github.com/AdityaIndoori">Aditya Indoori</a>.
+    <a href="https://github.com/AdityaIndoori/graph-engineering">Source and issues on GitHub</a>.</p>
+    <p>Built because a video about graph engineering was worth taking seriously,
+    and the honest version of the idea fits in one file.</p>
+  </div>
+</footer>
+
+<script>
+  // The only script on the page: copy-to-clipboard, progressively enhanced.
+  for (const btn of document.querySelectorAll('[data-copy]')) {
+    btn.addEventListener('click', async () => {
+      const code = btn.closest('.copywrap').querySelector('code').textContent;
+      try {
+        await navigator.clipboard.writeText(code);
+        btn.textContent = 'Copied';
+      } catch {
+        btn.textContent = 'Press Ctrl+C';
+      }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1600);
+    });
+  }
+</script>
+</body>
+</html>
