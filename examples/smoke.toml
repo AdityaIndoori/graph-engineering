@@ -1,0 +1,49 @@
+# Smoke graph: exercises fan-out, fan-in, gating, retries and templating using
+# only `python`, so it runs identically on Windows/macOS/Linux with zero agent
+# CLIs installed. Swap [agents.py] for [agents.claude] and the shape is unchanged
+# — that is the entire point.
+#
+#   python geng.py plan  examples/smoke.toml
+#   python geng.py run   examples/smoke.toml
+#   python geng.py run   examples/smoke.toml --resume   # everything cached
+
+[settings]
+default_agent = "py"
+max_parallel = 4
+# `sys.executable` is whatever interpreter is running geng, so this works on
+# every OS — including Linux boxes where only `python3` is on PATH.
+[agents.py]
+argv = ["{python}", "-c", "{prompt}"]
+
+# --- wave 1: fan-out. Three independent researchers, no shared context. -------
+
+[nodes.youtube]
+prompt = "print('youtube: 3 sources on agent DAGs')"
+
+[nodes.twitter]
+prompt = "print('twitter: steipete loops-vs-graphs thread')"
+
+[nodes.reddit]
+prompt = "print('reddit: near-zero organic traction')"
+
+# --- wave 2: fan-in. Downstream reads upstream stdout via {placeholders}. -----
+
+[nodes.report]
+needs = ["youtube", "twitter", "reddit"]
+out = "build/report.md"
+prompt = "print('# Report\\n- {youtube}\\n- {twitter}\\n- {reddit}')"
+
+# --- wave 3: the gate. A deterministic check, not an agent's self-assessment. --
+# Exits non-zero when a source is missing, which halts the whole graph.
+
+[nodes.verify]
+needs = ["report"]
+gate = true
+prompt = "import sys; t=open(r'{report_path}').read(); missing=[s for s in ('youtube','twitter','reddit') if s not in t]; sys.exit('MISSING: '+str(missing)) if missing else print('verify: all three sources present')"
+
+# --- wave 3 also: retry demo. Fails twice, succeeds on the third attempt. -----
+
+[nodes.flaky]
+needs = ["report"]
+retries = 2
+prompt = "import pathlib,sys; p=pathlib.Path('.geng/flaky-count'); n=int(p.read_text() or 0)+1 if p.exists() else 1; p.write_text(str(n)); print(f'flaky: settled after {{n}} attempts') if n>=3 else sys.exit(f'attempt {{n}} failed')"
