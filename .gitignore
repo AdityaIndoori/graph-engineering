@@ -1,0 +1,12 @@
+# geng writes all run state here; never commit it.
+.geng/
+build/
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+.DS_Store
+Thumbs.db

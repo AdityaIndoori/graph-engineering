@@ -1,0 +1,7 @@
+# Keep line endings stable across Windows/macOS/Linux checkouts so the test
+# suite and the content-hash resume keys behave identically everywhere.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
