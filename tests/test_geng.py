@@ -429,6 +429,33 @@ class TestExecution(Base):
         got = (self.tmp / ".geng" / "out" / "a.txt").read_text(encoding="utf-8").strip()
         self.assertEqual(Path(got), Path(PY))
 
+    def test_prompt_via_none_appends_nothing(self):
+        """A fixed command (a test runner) must not receive the prompt as argv."""
+        spec = self.spec(f"""
+            [agents.fixed]
+            argv = [{json.dumps(PY)}, "-c", "import sys; print(len(sys.argv) - 1)"]
+            prompt_via = "none"
+            [settings]
+            default_agent = "fixed"
+            [nodes.a]
+            prompt = "this text is documentation, not an argument"
+        """)
+        code, out = self.run_cli("run", str(spec))
+        self.assertEqual(code, 0, out)
+        extra = (self.tmp / ".geng" / "out" / "a.txt").read_text(encoding="utf-8").strip()
+        self.assertEqual(extra, "0", "prompt leaked into argv")
+
+    def test_bad_prompt_via_is_rejected(self):
+        s = self.spec("""
+            [agents.x]
+            argv = ["echo"]
+            prompt_via = "telepathy"
+            [nodes.a]
+            prompt = "hi"
+        """)
+        with self.assertRaisesRegex(geng.SpecError, "prompt_via"):
+            geng.load_graph(s)
+
     def test_stdin_prompt_delivery(self):
         spec = self.spec(f"""
             [agents.stdin_py]

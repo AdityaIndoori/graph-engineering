@@ -109,8 +109,10 @@ def load_graph(path: Path) -> Graph:
         if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
             raise SpecError(f"agents.{name}.argv must be a non-empty argv list or command string")
         prompt_via = body.get("prompt_via", "arg")
-        if prompt_via not in ("arg", "stdin"):
-            raise SpecError(f"agents.{name}.prompt_via must be 'arg' or 'stdin'")
+        if prompt_via not in ("arg", "stdin", "none"):
+            raise SpecError(
+                f"agents.{name}.prompt_via must be 'arg', 'stdin' or 'none' "
+                f"('none' for tools that take no prompt, like a fixed test command)")
         agents[name] = Agent(
             name=name,
             argv=argv,
