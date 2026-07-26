@@ -4,25 +4,19 @@
 <meta charset="utf-8">
 <title>geng / give an AI one job at a time</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Ask an AI to do a big coding job in one go and it loses track, then tells you it went fine. geng splits the job into small steps, gives each step only the tools it needs, and lets a real test decide if it worked.">
+<meta name="description" content="Split a big coding job into small steps. Give each step only the tools it needs. Let a real test decide if it worked.">
 <link rel="canonical" href="https://graphengineering.aindoori.com/">
 <meta property="og:title" content="geng / give an AI one job at a time">
-<meta property="og:description" content="Split a big job into steps. Give each step only the tools it needs. Let a real test decide if it worked.">
+<meta property="og:description" content="Split the job. Limit the tools. Let a test decide.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://graphengineering.aindoori.com/">
 <style>
-/* ============================================================
-   Palette: risograph print. Bone paper, oxide red, deep pine,
-   ochre. Every animation encodes a fact stated beside it, and
-   all of them stop under prefers-reduced-motion.
-   ============================================================ */
+/* Risograph print palette. Every animation carries a fact; all stop
+   under prefers-reduced-motion. Text is caption-length by design. */
 :root{
   --paper:#f2ede1; --paper-2:#e7dfcd; --rule:#c9bfa6;
   --ink:#1c1a17; --ink-soft:#5b5548;
-  --oxide:#bf3b17;   /* trouble, heat, the thing going wrong */
-  --pine:#0d5c52;    /* checked, working, safe */
-  --ochre:#c98a12;   /* the checkpoints */
-  --slate:#3d4a5c;   /* steps that can only look, not touch */
+  --oxide:#bf3b17; --pine:#0d5c52; --ochre:#c98a12; --slate:#3d4a5c;
   --fill-ink:#ffffff;
   --mono:"Cascadia Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
@@ -40,166 +34,145 @@
 html{scroll-behavior:smooth}
 html,body{overflow-x:hidden}
 pre,table,.copywrap{max-width:100%;min-width:0}
-.duo>*,.grid3>*,.fig,.pane,.card{min-width:0}
-body{
-  margin:0;background:var(--paper);color:var(--ink);
-  font:17px/1.62 var(--sans);
-  background-image:radial-gradient(var(--rule) .5px,transparent .5px);
-  background-size:22px 22px;
-}
-.wrap{max-width:960px;margin:0 auto;padding:0 24px}
-.narrow{max-width:60ch}
+.duo>*,.grid>*,.fig,.pane,.card{min-width:0}
+body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.55 var(--sans);
+  background-image:radial-gradient(var(--rule) .5px,transparent .5px);background-size:22px 22px}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
 a{color:var(--oxide);text-underline-offset:3px}
 a:focus-visible,button:focus-visible{outline:2.5px solid var(--pine);outline-offset:3px}
 .skip{position:absolute;left:-9999px;background:var(--ink);color:var(--paper);padding:12px 18px;z-index:20}
 .skip:focus{left:0;top:0}
 
-h1{font:700 clamp(32px,6vw,58px)/1.04 var(--sans);letter-spacing:-.035em;margin:0 0 .35em}
-h2{font:700 clamp(23px,3.4vw,34px)/1.14 var(--sans);letter-spacing:-.025em;margin:0 0 .5em;scroll-margin-top:24px}
-h3{font:600 15px/1.3 var(--mono);letter-spacing:.02em;margin:0 0 .5em}
-p{margin:0 0 .9em;max-width:60ch}
-.lede{font-size:clamp(18px,2.2vw,22px);color:var(--ink-soft);max-width:52ch}
-.eyebrow{font:600 12px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;
-  color:var(--oxide);margin:0 0 1em;display:flex;align-items:center;gap:10px}
+h1{font:700 clamp(34px,6.4vw,62px)/1.02 var(--sans);letter-spacing:-.038em;margin:0 0 .3em}
+h2{font:700 clamp(24px,3.6vw,36px)/1.1 var(--sans);letter-spacing:-.028em;margin:0 0 .45em;scroll-margin-top:24px}
+h3{font:600 13px/1.3 var(--mono);letter-spacing:.06em;margin:0 0 .7em}
+p{margin:0 0 .7em;max-width:56ch}
+.sub{font-size:clamp(18px,2.1vw,21px);color:var(--ink-soft);max-width:40ch;margin:0 0 1.4em}
+.cap{font:600 13px/1.5 var(--mono);color:var(--ink-soft);margin:12px 0 0;max-width:62ch}
+.eyebrow{font:600 12px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--oxide);margin:0 0 .9em;display:flex;align-items:center;gap:10px}
 .eyebrow::after{content:"";flex:1;height:2px;background:var(--rule)}
-.step-no{font:700 13px/1 var(--mono);color:var(--oxide);letter-spacing:.14em;margin:0 0 .7em}
+.no{font:700 12px/1 var(--mono);color:var(--oxide);letter-spacing:.16em;margin:0 0 .6em}
 
 header{border-bottom:2.5px solid var(--ink);background:var(--paper)}
-header .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px}
+header .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 24px}
 .brand{font:700 22px/1 var(--mono);letter-spacing:-.04em}
 .brand i{font-style:normal;color:var(--oxide)}
-.chip{font:600 11px/1 var(--mono);letter-spacing:.06em;padding:6px 9px;
-  border:2px solid var(--ink);border-radius:2px;background:var(--paper-2)}
+.chip{font:600 11px/1 var(--mono);padding:6px 9px;border:2px solid var(--ink);
+  border-radius:2px;background:var(--paper-2)}
 header nav{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap}
-header nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;
+header nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 11px;
   font:600 14px/1 var(--sans);text-decoration:none;color:var(--ink)}
 header nav a:hover{color:var(--oxide)}
-section{padding:60px 0;border-bottom:2.5px solid var(--rule)}
+section{padding:54px 0;border-bottom:2.5px solid var(--rule)}
 section:last-of-type{border-bottom:0}
 
-.row{display:flex;gap:14px;flex-wrap:wrap;margin-top:24px}
-.btn{display:inline-flex;align-items:center;min-height:52px;padding:0 24px;
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+.btn{display:inline-flex;align-items:center;min-height:52px;padding:0 22px;
   font:700 16px/1 var(--sans);text-decoration:none;border:2.5px solid var(--ink);
   border-radius:3px;box-shadow:var(--shadow);transition:transform .12s,box-shadow .12s}
 .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)}
 .btn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
 .btn.fill{background:var(--oxide);color:var(--fill-ink)}
 .btn.ghost{background:var(--paper);color:var(--ink)}
-.btn.sm{min-height:44px;font-size:14px;padding:0 16px}
+.btn.sm{min-height:44px;font-size:14px;padding:0 15px}
 
-pre{background:var(--ink);color:var(--paper);border-radius:3px;padding:18px 20px;
-  overflow-x:auto;margin:0 0 14px;font-family:var(--mono);font-size:14px;line-height:1.62;
+pre{background:var(--ink);color:var(--paper);border-radius:3px;padding:17px 19px;
+  overflow-x:auto;margin:0 0 12px;font-family:var(--mono);font-size:13.5px;line-height:1.6;
   border:2.5px solid var(--ink);box-shadow:var(--shadow)}
-pre .c{color:#8d8778}
-pre .g{color:#7fd8c4}
-pre .r{color:#ff8a63}
-pre .y{color:#f0bd4a}
+pre .c{color:#8d8778} pre .g{color:#7fd8c4} pre .r{color:#ff8a63} pre .y{color:#f0bd4a}
 pre b{color:#7fd8c4;font-weight:600}
-code{font-family:var(--mono);font-size:.9em;background:var(--paper-2);
+code{font-family:var(--mono);font-size:.89em;background:var(--paper-2);
   border:1.5px solid var(--rule);border-radius:3px;padding:.08em .3em}
 pre code{background:none;border:0;padding:0;font-size:inherit}
 .copywrap{position:relative}
-.copywrap button{position:absolute;top:10px;right:10px;min-height:44px;min-width:60px;
+.copywrap button{position:absolute;top:9px;right:9px;min-height:44px;min-width:58px;
   font:600 12px/1 var(--mono);background:var(--paper);color:var(--ink);
   border:2px solid var(--paper);border-radius:3px;cursor:pointer}
 .copywrap button:hover{background:var(--ochre)}
 
-/* word-in-a-box: a term defined the moment it appears */
-.term{display:inline-block;border-bottom:2.5px dotted var(--pine);
-  font-weight:650;color:var(--pine)}
-.defbox{border:2.5px solid var(--pine);border-left-width:9px;border-radius:3px;
-  background:var(--paper-2);padding:14px 18px;margin:0 0 18px;max-width:62ch}
-.defbox b{font:700 13px/1 var(--mono);color:var(--pine);display:block;margin-bottom:6px;
-  letter-spacing:.1em}
-.defbox p{margin:0;font-size:16px}
-
 .fig{background:var(--paper-2);border:2.5px solid var(--ink);border-radius:3px;
-  box-shadow:var(--shadow);padding:22px;margin:0 0 18px}
-.fig-cap{font:600 12.5px/1.5 var(--mono);color:var(--ink-soft);margin-top:14px;max-width:66ch}
-.duo{display:grid;grid-template-columns:1fr 1fr;gap:22px}
-@media(max-width:760px){.duo{grid-template-columns:1fr}}
+  box-shadow:var(--shadow);padding:20px}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+/* Both columns of the hero end level: the spacer absorbs the height difference
+   so the stamps line up instead of a gap opening under the shorter column. */
+.duo.balance>div{display:flex;flex-direction:column;height:100%}
+.duo.balance .spacer{flex:1;min-height:14px}
+.duo.balance .stamp,.duo.balance .verdict{margin-top:auto}
+@media(max-width:780px){.duo{grid-template-columns:1fr}}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:16px}
 
 .box{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper);
-  padding:11px 13px;font:600 13px/1.25 var(--mono);text-align:center}
-.box small{display:block;font:500 11px/1.35 var(--mono);color:var(--ink-soft);margin-top:4px}
+  padding:10px 12px;font:600 13px/1.22 var(--mono);text-align:center}
+.box small{display:block;font:500 11px/1.3 var(--mono);color:var(--ink-soft);margin-top:3px}
 .box.hot{border-color:var(--oxide);color:var(--oxide)}
 .box.gate{border-color:var(--ochre);border-style:dashed}
 .box.ro{border-color:var(--slate)}
 
-/* FIG 1: memory filling up, then a confident sign-off */
-.ctx{height:16px;border:2.5px solid var(--ink);border-radius:2px;background:var(--paper);
-  overflow:hidden;margin:12px 0 6px;position:relative}
+/* FIG 1: memory fills, sign-off lands anyway */
+.ctx{height:15px;border:2.5px solid var(--ink);border-radius:2px;background:var(--paper);
+  overflow:hidden;margin:11px 0 5px;position:relative}
 .ctx span{position:absolute;inset:0 auto 0 0;width:10%;
   background:repeating-linear-gradient(45deg,var(--pine) 0 6px,transparent 6px 12px);
   animation:fill 9s cubic-bezier(.3,0,.7,1) infinite}
-@keyframes fill{
-  0%{width:10%}30%{width:44%}60%{width:75%}
-  82%,100%{width:97%;background:repeating-linear-gradient(45deg,var(--oxide) 0 6px,transparent 6px 12px)}
-}
-.ctx-label{display:flex;justify-content:space-between;font:600 11px/1 var(--mono);color:var(--ink-soft)}
-.loop-ring{display:flex;align-items:center;justify-content:center;gap:10px;
-  font:600 12px/1 var(--mono);color:var(--oxide);margin-top:12px}
-.loop-ring b{display:inline-block;animation:spin 2.2s linear infinite;font-size:16px}
+@keyframes fill{0%{width:10%}30%{width:44%}60%{width:75%}
+  82%,100%{width:97%;background:repeating-linear-gradient(45deg,var(--oxide) 0 6px,transparent 6px 12px)}}
+.mini{display:flex;justify-content:space-between;font:600 11px/1 var(--mono);color:var(--ink-soft)}
+.ring{display:flex;align-items:center;justify-content:center;gap:9px;
+  font:600 12px/1 var(--mono);color:var(--oxide);margin-top:11px}
+.ring b{display:inline-block;animation:spin 2.2s linear infinite;font-size:16px}
 @keyframes spin{to{transform:rotate(360deg)}}
-.stamp{margin-top:14px;text-align:center;font:700 15px/1 var(--mono);
-  border:3px solid var(--oxide);color:var(--oxide);padding:9px;border-radius:3px;
+.stamp{margin-top:12px;text-align:center;font:700 14px/1 var(--mono);
+  border:3px solid var(--oxide);color:var(--oxide);padding:8px;border-radius:3px;
   transform:rotate(-3.5deg);opacity:0;animation:stamp 9s infinite}
 @keyframes stamp{0%,72%{opacity:0;transform:rotate(-3.5deg) scale(1.5)}
   80%,96%{opacity:1;transform:rotate(-3.5deg) scale(1)}100%{opacity:0}}
-.stamp em{display:block;font:500 10px/1.4 var(--mono);font-style:normal;margin-top:5px;letter-spacing:.03em}
-
-.chain{display:flex;flex-direction:column;gap:8px}
-.chain .box{opacity:.32;transform:translateY(3px);animation:pop 9s infinite}
+.stamp em{display:block;font:500 10px/1.4 var(--mono);font-style:normal;margin-top:4px}
+.chain{display:flex;flex-direction:column;gap:7px}
+.chain .box{opacity:.3;animation:pop 9s infinite}
 .chain .box:nth-child(1){animation-delay:0s}
 .chain .box:nth-child(3){animation-delay:1.5s}
 .chain .box:nth-child(5){animation-delay:3s}
 .chain .box:nth-child(7){animation-delay:4.5s}
-@keyframes pop{0%,4%{opacity:.32;transform:translateY(3px)}12%,88%{opacity:1;transform:none}100%{opacity:1}}
-.tick{text-align:center;font:600 13px/1 var(--mono);color:var(--rule)}
-.verdict{margin-top:14px;text-align:center;font:700 14px/1 var(--mono);
-  border:3px solid var(--pine);color:var(--pine);padding:9px;border-radius:3px;
-  opacity:0;animation:stamp 9s infinite;animation-delay:.6s}
-.verdict em{display:block;font:500 10px/1.4 var(--mono);font-style:normal;margin-top:5px}
+@keyframes pop{0%,4%{opacity:.3}12%,88%{opacity:1}100%{opacity:1}}
+.tick{text-align:center;font:600 12px/1 var(--mono);color:var(--rule)}
+.verdict{border-color:var(--pine);color:var(--pine);animation-delay:.6s}
+.verdict em{display:block;font:500 10px/1.4 var(--mono);font-style:normal;margin-top:4px}
 
-/* FIG 2: the tool is missing until the check passes */
-.perm{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center}
+/* FIG 2: tool absent, then granted */
+.perm{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
 @media(max-width:700px){.perm{grid-template-columns:1fr}}
-.pane{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper);padding:16px}
-.pane h4{margin:0 0 10px;font:600 13px/1 var(--mono);letter-spacing:.04em}
-.tool{display:flex;align-items:center;gap:9px;font:500 13px/1.2 var(--mono);
-  padding:9px 10px;margin-bottom:7px;border:2px solid var(--rule);border-radius:2px}
-.tool b{font:700 12px/1 var(--mono);width:16px;text-align:center;flex:none}
+.pane{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper);padding:14px}
+.pane h4{margin:0 0 9px;font:600 12px/1 var(--mono);letter-spacing:.05em}
+.tool{display:flex;align-items:center;gap:8px;font:500 12.5px/1.2 var(--mono);
+  padding:8px 9px;margin-bottom:6px;border:2px solid var(--rule);border-radius:2px}
+.tool b{font:700 12px/1 var(--mono);width:14px;text-align:center;flex:none}
 .tool.on{border-color:var(--pine);color:var(--pine)}
-.tool.off{border-color:var(--rule);color:var(--ink-soft);text-decoration:line-through;opacity:.55}
+.tool.off{border-color:var(--rule);color:var(--ink-soft);text-decoration:line-through;opacity:.5}
 .tool.armed{border-color:var(--oxide);color:var(--oxide);animation:arm 6s infinite;opacity:0}
 @keyframes arm{0%,45%{opacity:0;transform:translateX(-14px)}55%,92%{opacity:1;transform:none}100%{opacity:0}}
-.pgate{font:700 12px/1.4 var(--mono);color:var(--ochre);text-align:center;
-  border:3px dashed var(--ochre);border-radius:3px;padding:12px 10px}
+.pgate{font:700 11.5px/1.4 var(--mono);color:var(--ochre);text-align:center;
+  border:3px dashed var(--ochre);border-radius:3px;padding:11px 9px}
 
-/* FIG 3: things with no waiting-on happen at the same time */
-.waves{display:flex;flex-direction:column;gap:10px}
-.wave{display:flex;gap:10px;align-items:stretch}
-.wave .lab{font:600 11px/1 var(--mono);color:var(--ink-soft);
-  writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 0;flex:none}
+/* FIG 3: rounds */
+.waves{display:flex;flex-direction:column;gap:9px}
+.wave{display:flex;gap:9px}
+.wave .lab{font:600 10.5px/1 var(--mono);color:var(--ink-soft);
+  writing-mode:vertical-rl;transform:rotate(180deg);padding:3px 0;flex:none}
 .wave .box{flex:1}
 .w1 .box{animation:run 7s infinite}
 .w2 .box{animation:run 7s infinite;animation-delay:2.4s}
 .w3 .box{animation:run 7s infinite;animation-delay:4.4s}
-@keyframes run{
-  0%,3%{opacity:.3;border-color:var(--rule)}
+@keyframes run{0%,3%{opacity:.3;border-color:var(--rule)}
   10%,28%{opacity:1;border-color:var(--ochre);box-shadow:inset 0 -4px 0 var(--ochre)}
   34%,96%{opacity:1;border-color:var(--pine);box-shadow:inset 0 -4px 0 var(--pine)}
-  100%{opacity:.3;border-color:var(--rule);box-shadow:none}
-}
-.clock{font:600 12.5px/1 var(--mono);color:var(--ink-soft);margin-top:12px;display:flex;gap:20px;flex-wrap:wrap}
-.clock b{color:var(--pine)}
-.clock s{color:var(--oxide);text-decoration:none}
+  100%{opacity:.3;border-color:var(--rule);box-shadow:none}}
 
-/* FIG 4: each step gets its own copy of the project */
-.tracks{display:flex;flex-direction:column;gap:9px;font:600 12px/1 var(--mono)}
-.track{display:flex;align-items:center;gap:10px}
-.track .name{width:118px;color:var(--ink-soft);flex:none}
-.rail{flex:1;height:26px;border:2.5px solid var(--ink);border-radius:2px;
+/* FIG 4: private copies */
+.tracks{display:flex;flex-direction:column;gap:8px;font:600 12px/1 var(--mono)}
+.track{display:flex;align-items:center;gap:9px}
+.track .name{width:112px;color:var(--ink-soft);flex:none}
+.rail{flex:1;height:25px;border:2.5px solid var(--ink);border-radius:2px;
   background:var(--paper);position:relative;overflow:hidden;display:flex;align-items:center}
 .rail em{position:absolute;left:8px;font:600 11px/1 var(--mono);font-style:normal}
 .rail i{position:absolute;top:0;bottom:0;left:0;width:0;font-style:normal;animation:write 6s infinite}
@@ -209,34 +182,33 @@ pre code{background:none;border:0;padding:0;font-size:inherit}
 .trunk .rail{border-style:dashed;border-color:var(--rule)}
 .trunk .rail em{color:var(--ink-soft)}
 
-.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:18px}
 .card{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper-2);
-  padding:18px;box-shadow:var(--shadow)}
-.card .num{font:700 12px/1 var(--mono);color:var(--oxide);margin-bottom:8px;letter-spacing:.1em}
-.card h4{margin:0 0 6px;font:700 16px/1.25 var(--sans)}
-.card p{margin:0;font-size:14.5px;color:var(--ink-soft);max-width:none}
-table{border-collapse:collapse;width:100%;font-size:14.5px;display:block;overflow-x:auto}
-th,td{text-align:left;padding:9px 12px;border-bottom:2px solid var(--rule)}
-th{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
+  padding:16px;box-shadow:var(--shadow)}
+.card .num{font:700 11px/1 var(--mono);color:var(--oxide);margin-bottom:7px;letter-spacing:.12em}
+.card h4{margin:0 0 5px;font:700 15.5px/1.22 var(--sans)}
+.card p{margin:0;font-size:14px;color:var(--ink-soft);max-width:none}
+table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow-x:auto}
+th,td{text-align:left;padding:8px 11px;border-bottom:2px solid var(--rule)}
+th{font:600 10.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
 td code{white-space:nowrap}
-.checks{list-style:none;padding:0;margin:0;font-size:15.5px;max-width:62ch}
-.checks li{padding:9px 0 9px 32px;position:relative;border-bottom:1.5px solid var(--rule)}
-.checks li::before{content:"OK";position:absolute;left:0;top:10px;
-  font:700 10px/1.55 var(--mono);color:var(--pine)}
+.checks{list-style:none;padding:0;margin:0;font:500 14.5px/1.45 var(--sans);max-width:60ch}
+.checks li{padding:8px 0 8px 30px;position:relative;border-bottom:1.5px solid var(--rule)}
+.checks li::before{content:"OK";position:absolute;left:0;top:9px;
+  font:700 10px/1.5 var(--mono);color:var(--pine)}
 dl{margin:0}
-dt{font:600 16px/1.4 var(--sans);margin:1.3em 0 .15em}
+dt{font:600 15.5px/1.35 var(--sans);margin:1.15em 0 .1em}
 dt:first-child{margin-top:0}
-dd{margin:0;color:var(--ink-soft);max-width:60ch}
-.warn{border-left:6px solid var(--oxide);background:var(--paper-2);padding:14px 18px;
-  margin:18px 0;max-width:62ch}
+dd{margin:0;color:var(--ink-soft);max-width:58ch;font-size:15.5px}
+.warn{border-left:6px solid var(--oxide);background:var(--paper-2);padding:13px 17px;
+  margin:16px 0;max-width:58ch;font-size:15.5px}
 .warn b{color:var(--oxide)}
-footer{padding:34px 0 56px;font-size:14.5px;color:var(--ink-soft);border-top:2.5px solid var(--ink)}
+footer{padding:30px 0 50px;font-size:14px;color:var(--ink-soft);border-top:2.5px solid var(--ink)}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
   .ctx span{width:97%}
   .stamp,.verdict,.tool.armed{opacity:1}
-  .chain .box,.wave .box{opacity:1;transform:none}
+  .chain .box,.wave .box{opacity:1}
   .rail i{width:100%}
 }
 </style>
@@ -250,8 +222,8 @@ footer{padding:34px 0 56px;font-size:14.5px;color:var(--ink-soft);border-top:2.5
     <span class="chip">1 FILE</span>
     <span class="chip">0 SETUP</span>
     <nav aria-label="Primary">
-      <a href="#story">The problem</a>
-      <a href="#words">How it works</a>
+      <a href="#problem">Problem</a>
+      <a href="#fix">Fix</a>
       <a href="#try">Try it</a>
       <a href="#limits">When not to</a>
       <a href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
@@ -261,179 +233,147 @@ footer{padding:34px 0 56px;font-size:14.5px;color:var(--ink-soft);border-top:2.5
 
 <main id="main">
 
-<!-- ============ 1. HERO: plain english, no jargon ============ -->
+<!-- HERO: headline, one line, the picture, done -->
 <section>
   <div class="wrap">
-    <p class="eyebrow">A small tool for people who code with AI</p>
+    <p class="eyebrow">For people who code with AI</p>
     <h1>Give an AI one job<br>at a time.</h1>
-    <p class="lede">Ask an AI to do a big coding task all at once and two things go
-      wrong: it loses track of what it did, and then it tells you everything went
-      fine. geng splits the task into small steps and puts a real test in charge of
-      deciding whether it worked.</p>
+    <p class="sub">Split the work. Limit the tools. Let a test decide.</p>
+
+    <div class="fig">
+      <div class="duo balance">
+        <div>
+          <h3 style="color:var(--oxide)">ONE BIG JOB</h3>
+          <div class="box hot" aria-hidden="true">the AI<small>writes and checks itself</small></div>
+          <div class="ctx" aria-hidden="true"><span></span></div>
+          <div class="mini" aria-hidden="true"><span>memory</span><span>full</span></div>
+          <div class="ring" aria-hidden="true"><b>&#8635;</b> attempt 4</div>
+          <div class="spacer" aria-hidden="true"></div>
+          <div class="stamp" aria-hidden="true">ALL DONE<em>says the AI that wrote it</em></div>
+        </div>
+        <div>
+          <h3 style="color:var(--pine)">SPLIT INTO STEPS</h3>
+          <div class="chain" aria-hidden="true">
+            <div class="box ro">decide<small>cannot edit</small></div>
+            <div class="tick">&#8595;</div>
+            <div class="box">build<small>own copy</small></div>
+            <div class="tick">&#8595;</div>
+            <div class="box gate">run the tests<small>the stop sign</small></div>
+            <div class="tick">&#8595;</div>
+            <div class="box ro">review<small>cannot edit</small></div>
+          </div>
+          <div class="stamp verdict" aria-hidden="true">PASSED<em>says the test, not the AI</em></div>
+        </div>
+      </div>
+      <p class="cap">Left: memory fills, then it approves its own work.
+        Right: fresh memory each step, verdict from outside.</p>
+    </div>
+
     <div class="row">
-      <a class="btn fill" href="#story">Show me the problem</a>
+      <a class="btn fill" href="#try">Run one in 60 seconds</a>
       <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
     </div>
   </div>
 </section>
 
-<!-- ============ 2. THE STORY: one example, carried all the way down ============ -->
-<section id="story">
+<!-- PROBLEM -->
+<section id="problem">
   <div class="wrap">
-    <p class="step-no">PART 1 / WHAT GOES WRONG</p>
-    <h2>Say you ask an AI to<br>build a refund button.</h2>
-    <p class="narrow">Refunds send real money back to a customer, so it has rules.
-      The order must exist. It must be recent enough. The customer must not have
-      been refunded already.</p>
-    <p class="narrow">So you write one long instruction: <em>check all of these
-      things, and if they pass, send the refund.</em> You hand the AI the code, the
-      rules, and the ability to move money. Then you let it work.</p>
-
-    <div class="fig" style="margin-top:26px">
-      <div class="duo">
-        <div>
-          <h3 style="color:var(--oxide)">WHAT ACTUALLY HAPPENS</h3>
-          <div class="box hot" aria-hidden="true">the AI<small>reading, writing, and checking its own work</small></div>
-          <div class="ctx" aria-hidden="true"><span></span></div>
-          <div class="ctx-label" aria-hidden="true"><span>its memory of this task</span><span>full</span></div>
-          <div class="loop-ring" aria-hidden="true"><b>&#8635;</b> attempt 4, still going</div>
-          <div class="stamp" aria-hidden="true">ALL DONE<em>said by the same AI that wrote it</em></div>
-        </div>
-        <div>
-          <h3>THE TWO PROBLEMS</h3>
-          <p style="font-size:15.5px;margin-bottom:14px"><b style="color:var(--oxide)">1. It runs out of room.</b>
-            An AI can only hold so much of a conversation at once. Every attempt adds
-            more. By attempt four it has genuinely forgotten what it decided in
-            attempt one, so it starts contradicting itself.</p>
-          <p style="font-size:15.5px;margin:0"><b style="color:var(--oxide)">2. It marks its own homework.</b>
-            The same AI that wrote the refund code is the one deciding whether the
-            refund code is correct. It says yes. It usually says yes.</p>
-        </div>
-      </div>
-      <p class="fig-cap">The bar is the AI's working memory filling up. The stamp
-        lands while the bar is full, which is the whole problem in one picture.</p>
+    <p class="no">PART 1 / THE PROBLEM</p>
+    <h2>Ask for a refund button,<br>get three problems.</h2>
+    <div class="grid" style="margin-top:20px">
+      <div class="card"><div class="num">01</div><h4>It runs out of room</h4>
+        <p>An AI holds only so much at once. By attempt four it has forgotten
+          attempt one.</p></div>
+      <div class="card"><div class="num">02</div><h4>It marks its own work</h4>
+        <p>The AI that wrote the code decides if the code is right. It says yes.</p></div>
+      <div class="card"><div class="num">03</div><h4>It held the keys all along</h4>
+        <p>To finish in one go it could send money the whole time, including while
+          still deciding whether to.</p></div>
     </div>
-
-    <p class="narrow">And there is a third thing, quieter and worse. To do that job
-      in one go, the AI needed the power to send refunds <em>the entire time</em>,
-      including while it was still figuring out whether a refund was allowed.</p>
-    <p class="narrow"><b>You gave it the keys and a note asking it to be careful.</b></p>
+    <p class="cap" style="margin-top:18px">Problem 3 is the quiet one. You gave it the
+      keys and a note asking it to be careful.</p>
   </div>
 </section>
 
-<!-- ============ 3. THE FIX, same example ============ -->
-<section>
+<!-- FIX -->
+<section id="fix">
   <div class="wrap">
-    <p class="step-no">PART 2 / THE FIX</p>
-    <h2>Split it into steps, and<br>hand out tools per step.</h2>
-    <p class="narrow">Same refund job, done as two separate runs of the AI instead of
-      one. The first decides. The second acts. And here is the important part: the
-      first one <b>does not have the refund tool at all</b>.</p>
-
-    <div class="fig" style="margin-top:24px">
+    <p class="no">PART 2 / THE FIX</p>
+    <h2>Hand out tools per step.</h2>
+    <p class="sub">The step that decides has no refund tool.</p>
+    <div class="fig">
       <div class="perm">
         <div class="pane">
           <h4 style="color:var(--slate)">STEP 1 / DECIDE</h4>
-          <div class="tool on" aria-hidden="true"><b>+</b> look up the order</div>
-          <div class="tool on" aria-hidden="true"><b>+</b> look up the customer</div>
+          <div class="tool on" aria-hidden="true"><b>+</b> read the order</div>
+          <div class="tool on" aria-hidden="true"><b>+</b> read the customer</div>
           <div class="tool off" aria-hidden="true"><b>&times;</b> send a refund</div>
         </div>
         <div class="pgate" aria-hidden="true">CHECK<br>allowed?</div>
         <div class="pane">
           <h4 style="color:var(--oxide)">STEP 2 / ACT</h4>
-          <div class="tool on" aria-hidden="true"><b>+</b> look up the order</div>
+          <div class="tool on" aria-hidden="true"><b>+</b> read the order</div>
           <div class="tool armed" aria-hidden="true"><b>+</b> send a refund</div>
         </div>
       </div>
-      <p class="fig-cap">Watch the red row appear. Step 1 physically cannot send
-        money, however confused it gets. That ability shows up in step 2, only after
-        the check in the middle passed.</p>
+      <p class="cap">Watch the red row arrive. Step 1 cannot send money however
+        confused it gets. That power appears only after the check passes.</p>
     </div>
-
-    <p class="narrow">Compare the two versions honestly. In the first, the AI is
-      <em>asked</em> to behave. In the second, misbehaving is not available. That is
-      the difference between a rule and a locked door, and it is the real reason to
-      bother with any of this.</p>
-    <p class="narrow">Both problems from Part 1 are gone too. Each step starts with a
-      clean memory, holding only what it was handed. And the check in the middle is
-      not an AI having an opinion, it is a program: it runs your tests and either
-      passes or fails.</p>
+    <p style="max-width:52ch">A rule asks the AI to behave. A missing tool means
+      misbehaving is not available. That is the whole point.</p>
   </div>
 </section>
 
-<!-- ============ 4. VOCABULARY, only now, tied to the picture ============ -->
-<section id="words">
-  <div class="wrap">
-    <p class="step-no">PART 3 / FOUR WORDS</p>
-    <h2>Names for what you<br>have already seen.</h2>
-    <p class="narrow">You understood the idea from the two pictures. These are just
-      the labels, so the rest of the page has something to call them.</p>
-
-    <div class="grid3" style="margin-top:22px">
-      <div class="card"><div class="num">STEP</div>
-        <h4>One run of one thing</h4>
-        <p>&ldquo;Decide&rdquo; was a step. Running your tests was a step. It can be
-          an AI or an ordinary program.</p></div>
-      <div class="card"><div class="num">HAND-OFF</div>
-        <h4>A saved file</h4>
-        <p>A step's answer gets written to a file, and the next step's instructions
-          include that text. You can open it and read it.</p></div>
-      <div class="card"><div class="num">VERDICT</div>
-        <h4>A number, not an opinion</h4>
-        <p>Programs report <code>0</code> when they finish fine, and something else
-          when they do not. geng believes that number.</p></div>
-      <div class="card"><div class="num">GATE</div>
-        <h4>A step that can stop everything</h4>
-        <p>The &ldquo;CHECK / allowed?&rdquo; box. Mark a step as a gate and a
-          failure there halts the whole run.</p></div>
-    </div>
-
-    <p class="narrow" style="margin-top:22px">Why a number and not the AI's own
-      summary of how it went? Because <b>Cursor prints nothing readable when it
-      breaks, Kiro and aider have no summary option at all, and Claude, Codex and
-      Gemini each use a different format.</b> All nine tools report the number. It is
-      the one thing they agree on, which is why geng works with any of them.</p>
-  </div>
-</section>
-
-<!-- ============ 5. THE FILE: now readable, because the words are known ============ -->
+<!-- WORDS -->
 <section>
   <div class="wrap">
-    <p class="step-no">PART 4 / WRITING IT DOWN</p>
-    <h2>The whole thing is<br>one small text file.</h2>
-    <p class="narrow">You list your steps in a plain text file, and geng runs them in
-      order. Here is the refund example from Part 2, written out. Read the comments
-      in grey and it should say something you already understand.</p>
+    <p class="no">PART 3 / FOUR WORDS</p>
+    <h2>Labels for what you just saw.</h2>
+    <div class="grid" style="margin-top:20px">
+      <div class="card"><div class="num">STEP</div><h4>One run of one thing</h4>
+        <p>An AI, or an ordinary program like a test runner.</p></div>
+      <div class="card"><div class="num">HAND-OFF</div><h4>A saved file</h4>
+        <p>A step's answer goes into a file. The next step reads it.</p></div>
+      <div class="card"><div class="num">VERDICT</div><h4>A number, not an opinion</h4>
+        <p>Programs report <code>0</code> when fine. geng believes the number.</p></div>
+      <div class="card"><div class="num">GATE</div><h4>A step that can stop it all</h4>
+        <p>The CHECK box above. If it fails, nothing after it runs.</p></div>
+    </div>
+    <p class="cap" style="margin-top:18px">Why the number? Cursor prints nothing
+      readable when it breaks. Kiro and aider have no report at all. Claude, Codex and
+      Gemini use three formats. All nine report the number.</p>
+  </div>
+</section>
 
-    <div class="duo" style="margin-top:22px">
+<!-- FILE -->
+<section>
+  <div class="wrap">
+    <p class="no">PART 4 / THE FILE</p>
+    <h2>One small text file.</h2>
+    <div class="duo" style="margin-top:20px">
       <div>
         <h3>refund.toml</h3>
-<pre><span class="c"># Describe a way of running an AI. This one can</span>
-<span class="c"># read files, but has no power to send money.</span>
+<pre><span class="c"># an AI that can read, but not send money</span>
 <b>[agents.checker]</b>
 argv = ["claude", "-p", "--allowedTools", "Read"]
 
-<span class="c"># A plain command, not an AI.</span>
+<span class="c"># a plain command, not an AI</span>
 <b>[agents.shell]</b>
 argv = ["bash", "-lc", "{prompt}"]
 
-<span class="c"># Step one: decide. No refund tool here.</span>
 <b>[nodes.decide]</b>
 agent  = "checker"
-prompt = "Is order 4471 refundable? Answer YES or NO."
+prompt = "Is order 4471 refundable?"
 
-<span class="c"># Step two: the check. If it fails, stop.</span>
 <b>[nodes.tests]</b>
-needs  = ["decide"]  <span class="c"># wait for step one</span>
+needs  = ["decide"]  <span class="c"># wait for it</span>
 agent  = "shell"
 <span class="y">gate   = true</span>        <span class="c"># the stop sign</span>
 prompt = "npm test"</pre>
-        <p style="font-size:15px;color:var(--ink-soft)">The word geng uses for a step
-          is <code>node</code>, which is why the headings say
-          <code>[nodes.decide]</code>.</p>
       </div>
       <div>
-        <h3>What you see when you run it</h3>
+        <h3>Running it</h3>
 <pre><span class="c">$ python geng.py run refund.toml</span>
 
 wave 1  (1 node(s), 4 at a time)
@@ -443,291 +383,213 @@ wave 2  (1 node(s), 4 at a time)
   <span class="r">FAIL</span> tests exit=1 <span class="c">.geng/log/tests.log</span>
 
 halted: gate node(s) failed: tests</pre>
-        <p style="font-size:15.5px;color:var(--ink-soft)">The tests failed, so geng
-          stopped instead of carrying on to anything that touches money. If they had
-          passed, it would have moved to the next step. &ldquo;Wave&rdquo; is just
-          geng's word for a round of steps.</p>
-        <p style="font-size:15.5px;color:var(--ink-soft)">Swap <code>claude</code> for
-          the name of whichever AI tool you use, and nothing else in the file
-          changes.</p>
+        <p class="cap" style="margin-top:0">Tests failed, so it stopped before
+          touching money. <code>node</code> is geng's word for step,
+          <code>wave</code> for round.</p>
+        <p class="cap">Swap <code>claude</code> for your AI. Nothing else changes.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ============ 6. TRY IT: earliest possible hands-on ============ -->
+<!-- TRY -->
 <section id="try">
   <div class="wrap">
-    <p class="step-no">PART 5 / YOUR TURN</p>
-    <h2>Run one yourself,<br>with no AI needed.</h2>
-    <p class="narrow">You need Python and nothing else. The example below fakes its
-      AI steps with tiny Python snippets, so you can watch the machinery work
-      without signing up for anything or spending a cent.</p>
+    <p class="no">PART 5 / YOUR TURN</p>
+    <h2>Run one now. No AI needed.</h2>
+    <p class="sub">Needs Python. Costs nothing.</p>
     <div class="copywrap">
 <pre><code>git clone https://github.com/AdityaIndoori/graph-engineering
 cd graph-engineering
 python geng.py run examples/smoke.toml</code></pre>
       <button type="button" data-copy>Copy</button>
     </div>
-    <p class="narrow">You should see <code>6/6 ok</code>. Six steps ran, three of them
-      at the same time, one gate checked the result, and one step deliberately failed
-      twice before working, to show you what a retry looks like.</p>
-    <p class="narrow">That is the whole thing. You read the output, and that is all
-      you have to do. Nothing is running in the background afterwards, and nothing was
-      installed.</p>
-    <p class="narrow">Then run the exact same command again. Everything now reports
-      <code>cached</code> in under a second, because geng wrote down which steps
-      already worked and does not redo them. Open <code>examples/smoke.toml</code> in
-      any text editor, change one of the messages, run it a third time, and watch only
-      that step and the ones after it repeat.</p>
-    <div class="defbox" style="border-color:var(--ochre);border-left-color:var(--ochre)">
-      <b style="color:var(--ochre)">WHEN A STEP FAILS</b>
-      <p>It prints <code>FAIL</code> along with the path to a log file. Open that
-      file: it holds the exact command that ran and everything the command printed,
-      which is nearly always enough to see what went wrong.</p>
+    <div class="grid" style="margin-top:6px">
+      <div class="card"><div class="num">EXPECT</div><h4><code>6/6 ok</code></h4>
+        <p>Six steps, three at once, one gate, one retry after two failures.</p></div>
+      <div class="card"><div class="num">RUN IT AGAIN</div><h4>All <code>cached</code></h4>
+        <p>Under a second. geng skips what already worked.</p></div>
+      <div class="card"><div class="num">EDIT A PROMPT</div><h4>Only that part repeats</h4>
+        <p>That step and the ones after it. The rest stay cached.</p></div>
+      <div class="card"><div class="num">IF IT BREAKS</div><h4>Read the log</h4>
+        <p><code>FAIL</code> prints a file path holding the command and its output.</p></div>
     </div>
   </div>
 </section>
 
-<!-- ============ 7. PARALLEL, as a payoff not a feature ============ -->
+<!-- ROUNDS -->
 <section>
   <div class="wrap">
-    <p class="step-no">PART 6 / A BONUS</p>
-    <h2>Steps that do not wait<br>on each other run together.</h2>
-    <p class="narrow">You did not ask for this, you get it anyway. If three steps do
-      not need each other's answers, geng starts all three at once and only waits
-      when something actually depends on something else.</p>
-    <div class="fig" style="margin-top:22px">
+    <p class="no">PART 6 / FREE SPEED</p>
+    <h2>Steps that do not wait<br>run together.</h2>
+    <div class="fig">
       <div class="waves" aria-hidden="true">
         <div class="wave w1"><span class="lab">ROUND 1</span>
-          <div class="box">check the login code</div>
-          <div class="box">check the database code</div>
-          <div class="box">check the docs</div></div>
+          <div class="box">check login</div><div class="box">check database</div>
+          <div class="box">check docs</div></div>
         <div class="wave w2"><span class="lab">ROUND 2</span>
-          <div class="box">write one report from all three</div></div>
+          <div class="box">write one report</div></div>
         <div class="wave w3"><span class="lab">ROUND 3</span>
           <div class="box gate">run the tests</div></div>
       </div>
-      <div class="clock">
-        <span>three 2-second steps together: <b>2.3s</b></span>
-        <span>one after another: <s>6s</s></span>
-      </div>
-      <p class="fig-cap">Round 2 needs all three answers, so it waits. Round 3 is the
-        gate. geng works out the rounds for you from what each step says it needs.</p>
+      <p class="cap">Three 2-second steps together: <b style="color:var(--pine)">2.3s</b>.
+        One after another: <b style="color:var(--oxide)">6s</b>. Round 2 needs all
+        three answers, so it waits.</p>
     </div>
   </div>
 </section>
 
-<!-- ============ 8. ISOLATION, explained in plain terms ============ -->
+<!-- ISOLATION -->
 <section>
   <div class="wrap">
-    <p class="step-no">PART 7 / KEEPING THINGS SAFE</p>
-    <h2>Two AIs editing one file<br>without ruining it.</h2>
-    <p class="narrow">If two steps edit the same file at the same time, they overwrite
-      each other and you get nonsense. So geng can give a step its own private copy
-      of your project to work in.</p>
-    <div class="defbox">
-      <b>WHY THIS IS EASY</b>
-      <p>If you use <b>git</b> to store your code, it already knows how to keep
-      several copies of a project side by side. geng just asks git to make one per
-      step. If you do not use git, skip this part: everything else still works.</p>
-    </div>
-    <div class="fig" style="margin-top:20px">
+    <p class="no">PART 7 / SAFETY</p>
+    <h2>Two AIs, one file,<br>no mess.</h2>
+    <div class="fig">
       <div class="tracks" aria-hidden="true">
-        <div class="track t1"><span class="name">copy for step A</span>
+        <div class="track t1"><span class="name">copy for A</span>
           <span class="rail"><i></i><em>editing</em></span></div>
-        <div class="track t2"><span class="name">copy for step B</span>
+        <div class="track t2"><span class="name">copy for B</span>
           <span class="rail"><i></i><em>editing</em></span></div>
-        <div class="track trunk"><span class="name">your own files</span>
+        <div class="track trunk"><span class="name">your files</span>
           <span class="rail"><em>not touched</em></span></div>
       </div>
-      <p class="fig-cap">Both steps write freely in their own copy. Your files stay
-        exactly as you left them, and a step that fails leaves nothing behind, so a
-        broken attempt never looks like finished work.</p>
+      <p class="cap">Each step gets a private copy of the project, so both write
+        freely. Your files stay put. A failed step leaves nothing behind.
+        Needs <b>git</b>; skip this and the rest still works.</p>
     </div>
-    <p class="narrow">Afterwards you look at each copy and keep the one you like.</p>
   </div>
 </section>
 
-<!-- ============ 10. LEARN ============ -->
+<!-- LEARN -->
 <section>
   <div class="wrap">
-    <p class="step-no">PART 8 / GOING FURTHER</p>
-    <h2>Three ways to keep going.</h2>
-    <div class="grid3" style="margin-top:22px">
-      <div class="card">
-        <div class="num">START HERE</div>
-        <h4>Build one by hand</h4>
-        <p>Empty file to working setup, explaining every line. The first half needs
-          no AI tool, so it costs nothing to follow.</p>
-        <div class="row" style="margin-top:14px">
-          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">Tutorial</a>
-        </div>
-      </div>
-      <div class="card">
-        <div class="num">WITH A REAL AI</div>
-        <h4>Using omp or Claude Code</h4>
-        <p>The same steps driving an actual AI, including which settings really do
-          take away its ability to edit files, and which only look like they do.</p>
-        <div class="row" style="margin-top:14px">
+    <p class="no">PART 8 / GOING FURTHER</p>
+    <h2>Three ways in.</h2>
+    <div class="grid" style="margin-top:20px">
+      <div class="card"><div class="num">START HERE</div><h4>Build one by hand</h4>
+        <p>Empty file to working setup. First half needs no AI.</p>
+        <div class="row" style="margin-top:12px"><a class="btn ghost sm"
+          href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">Tutorial</a></div></div>
+      <div class="card"><div class="num">WITH A REAL AI</div><h4>omp or Claude Code</h4>
+        <p>Including which settings really remove edit access, and which only look
+          like they do.</p>
+        <div class="row" style="margin-top:12px">
           <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_OMP.md">omp</a>
-          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_CLAUDE.md">Claude</a>
-        </div>
-      </div>
-      <div class="card">
-        <div class="num">THE LAZY WAY</div>
-        <h4>Have the AI write the file</h4>
-        <p>Describe the job in normal English and let an AI write the setup file for
-          you, then check it before it runs. Needs one extra file so the AI knows the
-          format instead of guessing.</p>
-        <div class="row" style="margin-top:14px">
-          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_AI_WRITES_IT.md">How</a>
-        </div>
-      </div>
+          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_CLAUDE.md">Claude</a></div></div>
+      <div class="card"><div class="num">THE LAZY WAY</div><h4>Let an AI write it</h4>
+        <p>Describe the job in English, get the file, check it before it runs.</p>
+        <div class="row" style="margin-top:12px"><a class="btn ghost sm"
+          href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_AI_WRITES_IT.md">How</a></div></div>
     </div>
 
-    <h3 style="margin-top:34px">Two commands worth knowing first</h3>
-    <div class="copywrap">
-<pre><code>python geng.py plan graph.toml            # draws the steps, runs nothing
-python geng.py run graph.toml --dry-run  # shows the exact commands, runs nothing</code></pre>
-      <button type="button" data-copy>Copy</button>
+    <div class="duo" style="margin-top:26px">
+      <div>
+        <h3>Two safe commands</h3>
+        <div class="copywrap">
+<pre><code>python geng.py plan g.toml
+python geng.py run g.toml --dry-run</code></pre>
+          <button type="button" data-copy>Copy</button>
+        </div>
+        <p class="cap" style="margin-top:0">Both run nothing and cost nothing. The
+          second prints the exact commands first.</p>
+      </div>
+      <div>
+        <h3>Works with your AI</h3>
+        <table>
+          <tbody>
+            <tr><td>Claude Code</td><td><code>["claude", "-p"]</code></td></tr>
+            <tr><td>Oh My Pi</td><td><code>["omp", "-p"]</code></td></tr>
+            <tr><td>Codex</td><td><code>["codex", "exec"]</code></td></tr>
+            <tr><td>OpenCode</td><td><code>["opencode", "run"]</code></td></tr>
+            <tr><td>Kiro</td><td><code>["kiro-cli", "chat"]</code></td></tr>
+            <tr><td>Gemini</td><td><code>["gemini", "-p"]</code></td></tr>
+            <tr><td>Cursor</td><td><code>["cursor-agent", "-p"]</code></td></tr>
+            <tr><td>Amp</td><td><code>["amp", "-x"]</code></td></tr>
+            <tr><td>aider</td><td><code>["aider", "--message"]</code></td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    <p class="narrow" style="font-size:15.5px;color:var(--ink-soft)">Both of these
-      change nothing and cost nothing. Use the second one before any real run: it
-      prints exactly what each step would do, which is your last chance to notice a
-      mistake.</p>
-
-    <h3 style="margin-top:30px">Works with the AI tool you already use</h3>
-    <p class="narrow" style="font-size:15.5px;color:var(--ink-soft)">One line per
-      tool, and that line is the only thing you change to switch.</p>
-    <table style="max-width:640px">
-      <tbody>
-        <tr><td>Claude Code</td><td><code>["claude", "-p"]</code></td></tr>
-        <tr><td>Oh My Pi</td><td><code>["omp", "-p", "--no-session"]</code></td></tr>
-        <tr><td>OpenAI Codex</td><td><code>["codex", "exec"]</code></td></tr>
-        <tr><td>OpenCode</td><td><code>["opencode", "run", "--auto"]</code></td></tr>
-        <tr><td>Kiro</td><td><code>["kiro-cli", "chat", "--no-interactive"]</code></td></tr>
-        <tr><td>Gemini</td><td><code>["gemini", "-p"]</code></td></tr>
-        <tr><td>Cursor</td><td><code>["cursor-agent", "-p", "-f"]</code></td></tr>
-        <tr><td>Amp</td><td><code>["amp", "-x"]</code></td></tr>
-        <tr><td>aider</td><td><code>["aider", "--yes-always", "--message"]</code></td></tr>
-      </tbody>
-    </table>
   </div>
 </section>
 
-<!-- ============ 11. LIMITS, in plain speech ============ -->
+<!-- LIMITS -->
 <section id="limits">
   <div class="wrap">
-    <p class="step-no">PART 9 / BE HONEST</p>
-    <h2>Most jobs do not<br>need any of this.</h2>
-    <p class="narrow">If you are asking an AI to fix one function or write one file,
-      just ask it. Splitting that into steps is extra work for no gain, and this page
-      is not trying to talk you into it.</p>
-    <p class="narrow">It starts paying off in three situations:</p>
-    <div class="grid3" style="margin-top:20px">
-      <div class="card"><div class="num">1</div><h4>The job is too big to remember</h4>
-        <p>Many files, many decisions, and the AI keeps forgetting earlier ones.</p></div>
-      <div class="card"><div class="num">2</div><h4>You need a real check</h4>
-        <p>It matters too much to let the AI that wrote it be the one to approve it.</p></div>
-      <div class="card"><div class="num">3</div><h4>You are waiting around</h4>
-        <p>Jobs that have nothing to do with each other are running one by one.</p></div>
+    <p class="no">PART 9 / BE HONEST</p>
+    <h2>Most jobs do not<br>need this.</h2>
+    <p class="sub">Fixing one function? Just ask the AI.</p>
+    <div class="grid" style="margin-top:6px">
+      <div class="card"><div class="num">USE IT WHEN 1</div><h4>Too big to remember</h4>
+        <p>Many files, and the AI keeps forgetting earlier decisions.</p></div>
+      <div class="card"><div class="num">USE IT WHEN 2</div><h4>You need a real check</h4>
+        <p>Too important to let the author approve its own work.</p></div>
+      <div class="card"><div class="num">USE IT WHEN 3</div><h4>You are waiting around</h4>
+        <p>Unrelated jobs running one by one.</p></div>
     </div>
-
-    <div class="warn" style="margin-top:26px"><b>And a trap worth knowing about.</b>
-      Think of asking ten classmates to check your homework, except all ten
-      copied from the same wrong textbook. They will all agree with you, and it will
-      feel like ten confirmations. It is really only one.
-      <br><br>AI steps do exactly this. Ten steps using the same AI, reading the same
-      wrong information, reach the same wrong answer and agree. So the deciding step
-      should be a real test rather than another AI, and if you do want a second
-      opinion, get it from a <em>different</em> AI.</div>
-    <p class="narrow">Two other honest costs: running several AI steps costs several
-      times what asking once costs, and you still have to read what they did. That
-      reading is usually the real limit, not the tool.</p>
+    <div class="warn"><b>The trap.</b> Ten classmates checking your homework, all
+      copying from the same wrong textbook, will all agree. Ten AI steps do the same.
+      So let a real test decide, and get second opinions from a
+      <em>different</em> AI.</div>
+    <p class="cap">Four steps cost about four times one step. And you still have to
+      read the result. That is the real limit.</p>
   </div>
 </section>
 
-<!-- ============ 12. PROOF ============ -->
+<!-- PROOF -->
 <section>
   <div class="wrap">
-    <p class="step-no">PART 10 / DOES IT ACTUALLY WORK</p>
-    <h2>53 automatic tests say yes.</h2>
-    <p class="narrow">These run on Windows, Mac and Linux every time the code changes.
-      They check the promises made on this page, so you do not have to take my word
-      for any of them:</p>
-    <ul class="checks" style="margin-top:16px">
-      <li>Change one step's instructions and only that step, plus whatever came after
-        it, runs again.</li>
-      <li>When a gate fails, everything after it is skipped instead of quietly
-        running anyway.</li>
-      <li>Two steps writing the same file end up in separate copies, and your own
-        files are untouched.</li>
-      <li>A step that fails leaves nothing saved, so you cannot mistake it for
-        finished work.</li>
-      <li>Starting a second run while one is going is refused, rather than scrambling
-        both.</li>
-      <li><code>--dry-run</code> genuinely writes nothing at all.</li>
+    <p class="no">PART 10 / RECEIPTS</p>
+    <h2>53 tests, 3 systems.</h2>
+    <p class="sub">Every promise on this page is checked automatically.</p>
+    <ul class="checks">
+      <li>Edit one step and only that step, plus what follows, runs again.</li>
+      <li>A failed gate skips everything after it.</li>
+      <li>Two steps writing one file land in separate copies. Yours stay untouched.</li>
+      <li>A failed step saves nothing, so it cannot look finished.</li>
+      <li>A second run started mid-run is refused, not scrambled.</li>
+      <li><code>--dry-run</code> writes nothing at all.</li>
     </ul>
     <div class="row">
-      <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/geng.py">Read the whole tool</a>
+      <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/geng.py">Read the tool</a>
       <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/tests/test_geng.py">Read the tests</a>
       <a class="btn ghost" href="pitch.html">Nine slides</a>
     </div>
-    <p class="narrow" style="margin-top:16px;font-size:15.5px;color:var(--ink-soft)">
-      It is one file, about 600 lines, and it uses nothing but what Python already
-      ships with. You can read the entire thing in an afternoon.</p>
+    <p class="cap">One file, about 600 lines, nothing but plain Python.</p>
   </div>
 </section>
 
-<!-- ============ 13. FAQ ============ -->
+<!-- FAQ -->
 <section>
   <div class="wrap">
     <p class="eyebrow">Short answers</p>
-    <h2>Questions people<br>actually ask.</h2>
-    <dl class="narrow" style="margin-top:20px">
-      <dt>What if I do not have Python?</dt>
-      <dd>Install it from python.org, version 3.11 or newer. That is the only thing
-        geng needs. There is no package to install after that, on purpose: geng is a
-        single file you copy next to your project and delete when you are done.</dd>
-
-      <dt>Can I use this with ChatGPT?</dt>
-      <dd>Not the website, no. geng runs programs, so it needs an AI that runs as a
-        command on your computer. The nine in the list above all do. If you only use
-        AI through a browser tab, this tool has nothing to drive.</dd>
-
-      <dt>How do I know if the file I wrote is correct?</dt>
-      <dd>Run <code>python geng.py plan yourfile.toml</code>. It draws your steps and
-        runs nothing, and it refuses the file with an error if you referred to a step
-        that does not exist or made two steps wait on each other forever. Then
-        <code>--dry-run</code> shows the exact commands before any of them happen.</dd>
-
-      <dt>What does it look like when something goes wrong?</dt>
-      <dd>The failing step prints <code>FAIL</code> with the path to a log file, and
-        that file holds the exact command it ran and everything the command printed.
-        Fix the cause, run the same command again, and the steps that already worked
-        are skipped.</dd>
-
-      <dt>What does it cost?</dt>
-      <dd>geng is free. The AI steps cost whatever your AI tool charges, and running
-        four steps costs about four times running one. You can cap how many run at
-        once, and <code>--dry-run</code> costs nothing at all.</dd>
-
-      <dt>Do I need to know git?</dt>
-      <dd>Only for the private-copies idea in Part 7. Everything else works without
-        it.</dd>
-
-      <dt>Is this just a fancy name for something old?</dt>
-      <dd>Honestly, mostly. People started calling this &ldquo;graph
-        engineering&rdquo; a few weeks ago, but the shape of it is years old and
-        bigger tools do it too. The genuinely useful part is handing out tools per
-        step, which is Part 2.
-        <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/BACKGROUND.md">Longer version</a>.</dd>
-
-      <dt>Is it safe to run a file someone sent me?</dt>
-      <dd>No safer than running any script a stranger sends you. These files run real
-        commands on your computer, so read one before you run it.</dd>
-    </dl>
+    <h2>Likely questions.</h2>
+    <div class="duo" style="margin-top:18px">
+      <dl>
+        <dt>No Python?</dt>
+        <dd>Get 3.11 or newer from python.org. Nothing else to install.</dd>
+        <dt>Can I use ChatGPT?</dt>
+        <dd>Not the website. geng runs commands, so it needs an AI that runs on your
+          computer. The nine above do.</dd>
+        <dt>Is my file correct?</dt>
+        <dd><code>geng.py plan</code> draws it and refuses broken files. Then
+          <code>--dry-run</code> shows the commands.</dd>
+        <dt>What does it cost?</dt>
+        <dd>geng is free. Your AI charges per step, so four steps cost about four
+          times one.</dd>
+      </dl>
+      <dl>
+        <dt>Do I need git?</dt>
+        <dd>Only for the private copies in Part 7.</dd>
+        <dt>Just a new name for an old idea?</dt>
+        <dd>Mostly, yes. The useful part is Part 2.
+          <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/BACKGROUND.md">Longer version</a>.</dd>
+        <dt>Safe to run a stranger's file?</dt>
+        <dd>No safer than any script they send you. These run real commands.</dd>
+        <dt>Mix different AIs?</dt>
+        <dd>Yes, and you should. One builds, another checks.</dd>
+      </dl>
+    </div>
     <div class="row">
       <a class="btn fill" href="https://github.com/AdityaIndoori/graph-engineering">Get it on GitHub</a>
       <a class="btn ghost" href="#try">Run the example</a>
@@ -742,8 +604,6 @@ python geng.py run graph.toml --dry-run  # shows the exact commands, runs nothin
     <p><strong>geng</strong> / free and open source, by
       <a href="https://github.com/AdityaIndoori">Aditya Indoori</a>.
       <a href="https://github.com/AdityaIndoori/graph-engineering">Source and issues</a>.</p>
-    <p>Built because a video about graph engineering was worth taking seriously, and
-      the honest version of the idea fits in one file.</p>
   </div>
 </footer>
 
