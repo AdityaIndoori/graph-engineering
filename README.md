@@ -19,6 +19,7 @@ aider is a one-line change.
 ## Table of contents
 
 - [Try it in 60 seconds](#try-it-in-60-seconds)
+- [Learn it: the tutorial](#learn-it-the-tutorial)
 - [Install](#install)
 - [How it works](#how-it-works)
 - [Use the harness you already have](#use-the-harness-you-already-have)
@@ -68,6 +69,16 @@ $ python geng.py plan examples/smoke.toml
 ```
 
 That prints a Mermaid diagram plus the execution waves.
+
+## Learn it: the tutorial
+
+[**docs/TUTORIAL.md**](docs/TUTORIAL.md) teaches you to write a graph from an
+empty file. It starts with one node and five lines, then adds edges, a test gate,
+parallel steps, a real agent and git-worktree isolation — explaining every line
+before it is used. Parts 1&ndash;4 need no AI agent installed.
+
+Read that if you want to *understand* the spec. The
+[spec reference](#spec-reference) below is the lookup table for once you do.
 
 ## Install
 
@@ -174,7 +185,7 @@ argv = ["claude", "-p", "--allowedTools", "Read,Grep,Glob,Bash(git diff:*)"]
 The last two show the shape worth internalising: **parallelise reading and
 verifying, serialise writing and deciding.**
 
-[`docs/pitch.html`](docs/pitch.html) is a nine-slide walkthrough of the same three
+[`docs/TUTORIAL.md`](docs/TUTORIAL.md) builds a graph from scratch, and [`docs/pitch.html`](docs/pitch.html) is a nine-slide walkthrough of the same three
 cases. [`docs/BACKGROUND.md`](docs/BACKGROUND.md) covers where the term "graph
 engineering" came from and what is genuinely new about it.
 
@@ -243,7 +254,7 @@ cwd, exit, stdout, stderr) and `wt/<node>/` (worktrees). Add `.geng/` to your
 
 ## Verified behaviour
 
-`python -m unittest discover tests` runs 40 tests on Linux, macOS and Windows
+`python -m unittest discover tests` runs 51 tests on Linux, macOS and Windows
 across Python 3.11–3.13. They assert the properties that would otherwise be
 claims:
 

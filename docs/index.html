@@ -140,6 +140,7 @@
     <span class="ver">~550 lines &middot; stdlib only</span>
     <nav aria-label="Primary">
       <a href="#quickstart">Quickstart</a>
+      <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">Tutorial</a>
       <a href="#harness">Harnesses</a>
       <a href="#when-not">When not to</a>
       <a href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
@@ -296,7 +297,7 @@ python geng.py run examples/smoke.toml</code></pre>
 <pre><code>python geng.py plan examples/smoke.toml</code></pre>
         <button type="button" data-copy>Copy</button>
       </div>
-      Prints a Mermaid diagram plus the execution waves. <code>--dry-run</code>
+      Prints a Mermaid diagram plus the execution waves. Then read the <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">tutorial</a>, which builds a graph from an empty file and explains every line. <code>--dry-run</code>
       shows the exact argv each node would execute, and changes nothing.
     </li>
   </ol>
@@ -318,12 +319,13 @@ python geng.py run examples/smoke.toml</code></pre>
   <p>The last two show the shape worth internalising:
   <strong>parallelise reading and verifying, serialise writing and deciding.</strong></p>
   <div class="cta">
+    <a class="secondary" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">Read the tutorial</a>
     <a class="secondary" href="pitch.html">Nine-slide walkthrough</a>
     <a class="secondary" href="https://github.com/AdityaIndoori/graph-engineering/tree/main/examples">Read the specs</a>
   </div>
 
   <h2 id="proof">Proof, not claims</h2>
-  <p>49 tests run on Linux, macOS and Windows across Python 3.11&ndash;3.13. They
+  <p>51 tests run on Linux, macOS and Windows across Python 3.11&ndash;3.13. They
   assert the properties that would otherwise just be marketing:</p>
   <ul>
     <li>editing one prompt invalidates that node <strong>and its descendants</strong>, nothing else</li>

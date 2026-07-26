@@ -138,8 +138,15 @@ def load_graph(path: Path) -> Graph:
         if not isinstance(prompt, str) or not prompt.strip():
             raise SpecError(f"nodes.{nid}.prompt is required and must be a non-empty string")
         agent = body.get("agent", settings.get("default_agent"))
+        if agent is None and len(agents) == 1:
+            # With exactly one agent defined there is no ambiguity, so requiring
+            # default_agent would be ceremony. Two or more must be explicit.
+            agent = next(iter(agents))
         if not isinstance(agent, str):
-            raise SpecError(f"nodes.{nid}.agent missing and settings.default_agent unset")
+            raise SpecError(
+                f"nodes.{nid} has no agent: set `agent = ...` on the node, or "
+                f"`default_agent = ...` under [settings] "
+                f"(defined agents: {', '.join(sorted(agents)) or 'none'})")
         if agent not in agents:
             raise SpecError(f"nodes.{nid}.agent = {agent!r} is not defined in [agents]")
         nodes[nid] = Node(

@@ -103,6 +103,27 @@ class TestSpecValidation(Base):
         with self.assertRaisesRegex(geng.SpecError, "not defined"):
             geng.load_graph(s)
 
+    def test_sole_agent_is_used_without_declaring_it(self):
+        """One agent means no ambiguity, so a minimal spec needs no boilerplate."""
+        g = geng.load_graph(self.spec(f"""
+            {self.agent()}
+            [nodes.a]
+            prompt = "print(1)"
+        """))
+        self.assertEqual(g.nodes["a"].agent, "py")
+
+    def test_ambiguous_agent_must_be_declared(self):
+        """Two agents and no default is a real ambiguity: fail, naming the options."""
+        s = self.spec(f"""
+            {self.agent()}
+            [agents.other]
+            argv = ["echo"]
+            [nodes.a]
+            prompt = "print(1)"
+        """)
+        with self.assertRaisesRegex(geng.SpecError, "other, py"):
+            geng.load_graph(s)
+
     def test_missing_prompt_is_rejected(self):
         s = self.spec(f"""
             [settings]
