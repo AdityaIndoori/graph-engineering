@@ -2,31 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>geng / run coding agents as a graph</title>
+<title>geng / give an AI one job at a time</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="One agent looping over ten jobs fills its context and then approves its own work. geng runs the same work as a graph: clean context per step, tools granted per step, and a test command holding the verdict.">
+<meta name="description" content="Ask an AI to do a big coding job in one go and it loses track, then tells you it went fine. geng splits the job into small steps, gives each step only the tools it needs, and lets a real test decide if it worked.">
 <link rel="canonical" href="https://graphengineering.aindoori.com/">
-<meta property="og:title" content="geng / run coding agents as a graph">
-<meta property="og:description" content="A node is a subprocess. An edge is a file. The exit code is the verdict.">
+<meta property="og:title" content="geng / give an AI one job at a time">
+<meta property="og:description" content="Split a big job into steps. Give each step only the tools it needs. Let a real test decide if it worked.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://graphengineering.aindoori.com/">
 <style>
 /* ============================================================
    Palette: risograph print. Bone paper, oxide red, deep pine,
-   ochre. Chosen to read as printed matter rather than a dashboard.
-   Every animation below encodes a fact stated in the adjacent text,
-   and all of them stop under prefers-reduced-motion.
+   ochre. Every animation encodes a fact stated beside it, and
+   all of them stop under prefers-reduced-motion.
    ============================================================ */
 :root{
   --paper:#f2ede1; --paper-2:#e7dfcd; --rule:#c9bfa6;
   --ink:#1c1a17; --ink-soft:#5b5548;
-  --oxide:#bf3b17;      /* failure, the loop, heat */
-  --pine:#0d5c52;       /* success, verified, cool */
-  --ochre:#c98a12;      /* gates, caution */
-  --slate:#3d4a5c;      /* read only nodes */
+  --oxide:#bf3b17;   /* trouble, heat, the thing going wrong */
+  --pine:#0d5c52;    /* checked, working, safe */
+  --ochre:#c98a12;   /* the checkpoints */
+  --slate:#3d4a5c;   /* steps that can only look, not touch */
+  --fill-ink:#ffffff;
   --mono:"Cascadia Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  --fill-ink:#ffffff;
   --shadow:3px 3px 0 var(--ink);
 }
 @media (prefers-color-scheme:dark){
@@ -34,45 +33,39 @@
     --paper:#17181c; --paper-2:#1f2126; --rule:#3a3d45;
     --ink:#f0ece2; --ink-soft:#a8a294;
     --oxide:#ff6b3d; --pine:#3fbfa8; --ochre:#e8b23c; --slate:#8fa3bd;
-    --fill-ink:#17181c;
-    --shadow:3px 3px 0 #000;
+    --fill-ink:#17181c; --shadow:3px 3px 0 #000;
   }
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-/* A long command or a wide table scrolls inside its own box; neither is
-   allowed to widen the document and force a sideways page scroll. */
 html,body{overflow-x:hidden}
 pre,table,.copywrap{max-width:100%;min-width:0}
 .duo>*,.grid3>*,.fig,.pane,.card{min-width:0}
 body{
   margin:0;background:var(--paper);color:var(--ink);
-  font:17px/1.6 var(--sans);
-  /* Faint paper grain, drawn not downloaded. */
+  font:17px/1.62 var(--sans);
   background-image:radial-gradient(var(--rule) .5px,transparent .5px);
   background-size:22px 22px;
 }
 .wrap{max-width:960px;margin:0 auto;padding:0 24px}
-.narrow{max-width:62ch}
+.narrow{max-width:60ch}
 a{color:var(--oxide);text-underline-offset:3px}
 a:focus-visible,button:focus-visible{outline:2.5px solid var(--pine);outline-offset:3px}
 .skip{position:absolute;left:-9999px;background:var(--ink);color:var(--paper);padding:12px 18px;z-index:20}
 .skip:focus{left:0;top:0}
 
-/* ---------- type ---------- */
-h1{font:700 clamp(34px,6.5vw,64px)/1.02 var(--sans);letter-spacing:-.035em;margin:0 0 .35em}
-h2{font:700 clamp(23px,3.4vw,34px)/1.15 var(--sans);letter-spacing:-.025em;margin:0 0 .5em;scroll-margin-top:24px}
+h1{font:700 clamp(32px,6vw,58px)/1.04 var(--sans);letter-spacing:-.035em;margin:0 0 .35em}
+h2{font:700 clamp(23px,3.4vw,34px)/1.14 var(--sans);letter-spacing:-.025em;margin:0 0 .5em;scroll-margin-top:24px}
 h3{font:600 15px/1.3 var(--mono);letter-spacing:.02em;margin:0 0 .5em}
-p{margin:0 0 .9em;max-width:62ch}
-.lede{font-size:clamp(18px,2.2vw,22px);color:var(--ink-soft);max-width:54ch}
+p{margin:0 0 .9em;max-width:60ch}
+.lede{font-size:clamp(18px,2.2vw,22px);color:var(--ink-soft);max-width:52ch}
 .eyebrow{font:600 12px/1 var(--mono);letter-spacing:.22em;text-transform:uppercase;
   color:var(--oxide);margin:0 0 1em;display:flex;align-items:center;gap:10px}
 .eyebrow::after{content:"";flex:1;height:2px;background:var(--rule)}
-.big{font:700 clamp(26px,4vw,40px)/1.15 var(--sans);letter-spacing:-.025em;max-width:44ch}
+.step-no{font:700 13px/1 var(--mono);color:var(--oxide);letter-spacing:.14em;margin:0 0 .7em}
 
-/* ---------- structure ---------- */
 header{border-bottom:2.5px solid var(--ink);background:var(--paper)}
-header .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:14px;padding-bottom:14px}
+header .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px}
 .brand{font:700 22px/1 var(--mono);letter-spacing:-.04em}
 .brand i{font-style:normal;color:var(--oxide)}
 .chip{font:600 11px/1 var(--mono);letter-spacing:.06em;padding:6px 9px;
@@ -81,31 +74,27 @@ header nav{margin-left:auto;display:flex;gap:2px;flex-wrap:wrap}
 header nav a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;
   font:600 14px/1 var(--sans);text-decoration:none;color:var(--ink)}
 header nav a:hover{color:var(--oxide)}
-section{padding:64px 0;border-bottom:2.5px solid var(--rule)}
+section{padding:60px 0;border-bottom:2.5px solid var(--rule)}
 section:last-of-type{border-bottom:0}
 
-/* ---------- buttons ---------- */
-.row{display:flex;gap:14px;flex-wrap:wrap;margin-top:26px}
+.row{display:flex;gap:14px;flex-wrap:wrap;margin-top:24px}
 .btn{display:inline-flex;align-items:center;min-height:52px;padding:0 24px;
   font:700 16px/1 var(--sans);text-decoration:none;border:2.5px solid var(--ink);
   border-radius:3px;box-shadow:var(--shadow);transition:transform .12s,box-shadow .12s}
 .btn:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--ink)}
 .btn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
-/* The accent doubles as link colour and button fill, and those want opposite
-   text. In dark mode the accent is light, so the button takes dark ink. */
 .btn.fill{background:var(--oxide);color:var(--fill-ink)}
 .btn.ghost{background:var(--paper);color:var(--ink)}
+.btn.sm{min-height:44px;font-size:14px;padding:0 16px}
 
-/* ---------- code ---------- */
 pre{background:var(--ink);color:var(--paper);border-radius:3px;padding:18px 20px;
   overflow-x:auto;margin:0 0 14px;font-family:var(--mono);font-size:14px;line-height:1.62;
   border:2.5px solid var(--ink);box-shadow:var(--shadow)}
-pre b{color:#7fd8c4;font-weight:600}
-pre u{color:#f0bd4a;text-decoration:none;font-weight:600}
-pre i{color:#8d8778;font-style:normal}
 pre .c{color:#8d8778}
 pre .g{color:#7fd8c4}
 pre .r{color:#ff8a63}
+pre .y{color:#f0bd4a}
+pre b{color:#7fd8c4;font-weight:600}
 code{font-family:var(--mono);font-size:.9em;background:var(--paper-2);
   border:1.5px solid var(--rule);border-radius:3px;padding:.08em .3em}
 pre code{background:none;border:0;padding:0;font-size:inherit}
@@ -115,146 +104,131 @@ pre code{background:none;border:0;padding:0;font-size:inherit}
   border:2px solid var(--paper);border-radius:3px;cursor:pointer}
 .copywrap button:hover{background:var(--ochre)}
 
-/* ============================================================
-   FIGURE 1: the loop. A context bar fills with each pass and
-   turns hot; the self-approval stamp lands while it is full.
-   ============================================================ */
+/* word-in-a-box: a term defined the moment it appears */
+.term{display:inline-block;border-bottom:2.5px dotted var(--pine);
+  font-weight:650;color:var(--pine)}
+.defbox{border:2.5px solid var(--pine);border-left-width:9px;border-radius:3px;
+  background:var(--paper-2);padding:14px 18px;margin:0 0 18px;max-width:62ch}
+.defbox b{font:700 13px/1 var(--mono);color:var(--pine);display:block;margin-bottom:6px;
+  letter-spacing:.1em}
+.defbox p{margin:0;font-size:16px}
+
 .fig{background:var(--paper-2);border:2.5px solid var(--ink);border-radius:3px;
   box-shadow:var(--shadow);padding:22px;margin:0 0 18px}
-.fig-cap{font:600 12px/1.4 var(--mono);letter-spacing:.04em;color:var(--ink-soft);margin-top:14px}
+.fig-cap{font:600 12.5px/1.5 var(--mono);color:var(--ink-soft);margin-top:14px;max-width:66ch}
 .duo{display:grid;grid-template-columns:1fr 1fr;gap:22px}
 @media(max-width:760px){.duo{grid-template-columns:1fr}}
 
 .box{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper);
   padding:11px 13px;font:600 13px/1.25 var(--mono);text-align:center}
-.box small{display:block;font:500 11px/1.3 var(--mono);color:var(--ink-soft);margin-top:4px}
+.box small{display:block;font:500 11px/1.35 var(--mono);color:var(--ink-soft);margin-top:4px}
 .box.hot{border-color:var(--oxide);color:var(--oxide)}
-.box.cool{border-color:var(--pine)}
 .box.gate{border-color:var(--ochre);border-style:dashed}
 .box.ro{border-color:var(--slate)}
 
+/* FIG 1: memory filling up, then a confident sign-off */
 .ctx{height:16px;border:2.5px solid var(--ink);border-radius:2px;background:var(--paper);
   overflow:hidden;margin:12px 0 6px;position:relative}
-.ctx span{position:absolute;inset:0 auto 0 0;width:8%;
+.ctx span{position:absolute;inset:0 auto 0 0;width:10%;
   background:repeating-linear-gradient(45deg,var(--pine) 0 6px,transparent 6px 12px);
   animation:fill 9s cubic-bezier(.3,0,.7,1) infinite}
 @keyframes fill{
-  0%{width:8%;background-color:transparent}
-  30%{width:42%}
-  60%{width:74%}
-  82%,100%{width:97%;
-    background:repeating-linear-gradient(45deg,var(--oxide) 0 6px,transparent 6px 12px)}
+  0%{width:10%}30%{width:44%}60%{width:75%}
+  82%,100%{width:97%;background:repeating-linear-gradient(45deg,var(--oxide) 0 6px,transparent 6px 12px)}
 }
 .ctx-label{display:flex;justify-content:space-between;font:600 11px/1 var(--mono);color:var(--ink-soft)}
 .loop-ring{display:flex;align-items:center;justify-content:center;gap:10px;
   font:600 12px/1 var(--mono);color:var(--oxide);margin-top:12px}
 .loop-ring b{display:inline-block;animation:spin 2.2s linear infinite;font-size:16px}
 @keyframes spin{to{transform:rotate(360deg)}}
-
 .stamp{margin-top:14px;text-align:center;font:700 15px/1 var(--mono);
   border:3px solid var(--oxide);color:var(--oxide);padding:9px;border-radius:3px;
   transform:rotate(-3.5deg);opacity:0;animation:stamp 9s infinite}
 @keyframes stamp{0%,72%{opacity:0;transform:rotate(-3.5deg) scale(1.5)}
   80%,96%{opacity:1;transform:rotate(-3.5deg) scale(1)}100%{opacity:0}}
-.stamp em{display:block;font:500 10px/1.3 var(--mono);font-style:normal;margin-top:4px;letter-spacing:.04em}
+.stamp em{display:block;font:500 10px/1.4 var(--mono);font-style:normal;margin-top:5px;letter-spacing:.03em}
 
-/* ---- the graph side: nodes light in sequence, gate rules ---- */
 .chain{display:flex;flex-direction:column;gap:8px}
 .chain .box{opacity:.32;transform:translateY(3px);animation:pop 9s infinite}
 .chain .box:nth-child(1){animation-delay:0s}
 .chain .box:nth-child(3){animation-delay:1.5s}
 .chain .box:nth-child(5){animation-delay:3s}
 .chain .box:nth-child(7){animation-delay:4.5s}
-@keyframes pop{0%,4%{opacity:.32;transform:translateY(3px)}
-  12%,88%{opacity:1;transform:none}100%{opacity:1}}
+@keyframes pop{0%,4%{opacity:.32;transform:translateY(3px)}12%,88%{opacity:1;transform:none}100%{opacity:1}}
 .tick{text-align:center;font:600 13px/1 var(--mono);color:var(--rule)}
 .verdict{margin-top:14px;text-align:center;font:700 14px/1 var(--mono);
   border:3px solid var(--pine);color:var(--pine);padding:9px;border-radius:3px;
   opacity:0;animation:stamp 9s infinite;animation-delay:.6s}
-.verdict em{display:block;font:500 10px/1.3 var(--mono);font-style:normal;margin-top:4px}
+.verdict em{display:block;font:500 10px/1.4 var(--mono);font-style:normal;margin-top:5px}
 
-/* ============================================================
-   FIGURE 2: capability. The dangerous tool is absent from the
-   checking step and appears only past the gate.
-   ============================================================ */
+/* FIG 2: the tool is missing until the check passes */
 .perm{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center}
 @media(max-width:700px){.perm{grid-template-columns:1fr}}
 .pane{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper);padding:16px}
 .pane h4{margin:0 0 10px;font:600 13px/1 var(--mono);letter-spacing:.04em}
-.tool{display:flex;align-items:center;gap:9px;font:500 13px/1 var(--mono);
-  padding:8px 10px;margin-bottom:7px;border:2px solid var(--rule);border-radius:2px}
-.tool b{font:700 12px/1 var(--mono);width:16px;text-align:center}
+.tool{display:flex;align-items:center;gap:9px;font:500 13px/1.2 var(--mono);
+  padding:9px 10px;margin-bottom:7px;border:2px solid var(--rule);border-radius:2px}
+.tool b{font:700 12px/1 var(--mono);width:16px;text-align:center;flex:none}
 .tool.on{border-color:var(--pine);color:var(--pine)}
-.tool.off{border-color:var(--rule);color:var(--ink-soft);text-decoration:line-through;opacity:.6}
-.tool.armed{border-color:var(--oxide);color:var(--oxide);
-  animation:arm 6s infinite;opacity:0}
-@keyframes arm{0%,45%{opacity:0;transform:translateX(-14px)}
-  55%,92%{opacity:1;transform:none}100%{opacity:0}}
-.pgate{font:700 12px/1.3 var(--mono);color:var(--ochre);text-align:center;
-  border:3px dashed var(--ochre);border-radius:3px;padding:12px 10px;white-space:nowrap}
+.tool.off{border-color:var(--rule);color:var(--ink-soft);text-decoration:line-through;opacity:.55}
+.tool.armed{border-color:var(--oxide);color:var(--oxide);animation:arm 6s infinite;opacity:0}
+@keyframes arm{0%,45%{opacity:0;transform:translateX(-14px)}55%,92%{opacity:1;transform:none}100%{opacity:0}}
+.pgate{font:700 12px/1.4 var(--mono);color:var(--ochre);text-align:center;
+  border:3px dashed var(--ochre);border-radius:3px;padding:12px 10px}
 
-/* ============================================================
-   FIGURE 3: waves. Independent nodes occupy one row and run
-   together; a dependent node waits for the row to finish.
-   ============================================================ */
+/* FIG 3: things with no waiting-on happen at the same time */
 .waves{display:flex;flex-direction:column;gap:10px}
 .wave{display:flex;gap:10px;align-items:stretch}
 .wave .lab{font:600 11px/1 var(--mono);color:var(--ink-soft);
-  writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 0}
+  writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 0;flex:none}
 .wave .box{flex:1}
 .w1 .box{animation:run 7s infinite}
 .w2 .box{animation:run 7s infinite;animation-delay:2.4s}
 .w3 .box{animation:run 7s infinite;animation-delay:4.4s}
 @keyframes run{
   0%,3%{opacity:.3;border-color:var(--rule)}
-  10%,28%{opacity:1;border-color:var(--ochre);
-    box-shadow:inset 0 -4px 0 var(--ochre)}
+  10%,28%{opacity:1;border-color:var(--ochre);box-shadow:inset 0 -4px 0 var(--ochre)}
   34%,96%{opacity:1;border-color:var(--pine);box-shadow:inset 0 -4px 0 var(--pine)}
   100%{opacity:.3;border-color:var(--rule);box-shadow:none}
 }
-.clock{font:600 12px/1 var(--mono);color:var(--ink-soft);margin-top:12px;display:flex;gap:18px;flex-wrap:wrap}
+.clock{font:600 12.5px/1 var(--mono);color:var(--ink-soft);margin-top:12px;display:flex;gap:20px;flex-wrap:wrap}
 .clock b{color:var(--pine)}
 .clock s{color:var(--oxide);text-decoration:none}
 
-/* ============================================================
-   FIGURE 4: isolation. Two writers on one file, each in its own
-   checkout; the trunk stays as it was.
-   ============================================================ */
+/* FIG 4: each step gets its own copy of the project */
 .tracks{display:flex;flex-direction:column;gap:9px;font:600 12px/1 var(--mono)}
 .track{display:flex;align-items:center;gap:10px}
-.track .name{width:112px;color:var(--ink-soft);flex:none}
+.track .name{width:118px;color:var(--ink-soft);flex:none}
 .rail{flex:1;height:26px;border:2.5px solid var(--ink);border-radius:2px;
   background:var(--paper);position:relative;overflow:hidden;display:flex;align-items:center}
 .rail em{position:absolute;left:8px;font:600 11px/1 var(--mono);font-style:normal}
-.rail i{position:absolute;top:0;bottom:0;left:0;width:0;font-style:normal;
-  animation:write 6s infinite}
+.rail i{position:absolute;top:0;bottom:0;left:0;width:0;font-style:normal;animation:write 6s infinite}
 .t1 .rail i{background:color-mix(in srgb,var(--pine) 22%,transparent)}
 .t2 .rail i{background:color-mix(in srgb,var(--slate) 22%,transparent);animation-delay:.5s}
 @keyframes write{0%{width:0}40%,88%{width:100%}100%{width:0}}
 .trunk .rail{border-style:dashed;border-color:var(--rule)}
 .trunk .rail em{color:var(--ink-soft)}
 
-/* ---------- steps / cards ---------- */
-.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(228px,1fr));gap:18px}
 .card{border:2.5px solid var(--ink);border-radius:3px;background:var(--paper-2);
   padding:18px;box-shadow:var(--shadow)}
-.card .num{font:700 13px/1 var(--mono);color:var(--oxide);margin-bottom:8px}
+.card .num{font:700 12px/1 var(--mono);color:var(--oxide);margin-bottom:8px;letter-spacing:.1em}
 .card h4{margin:0 0 6px;font:700 16px/1.25 var(--sans)}
 .card p{margin:0;font-size:14.5px;color:var(--ink-soft);max-width:none}
 table{border-collapse:collapse;width:100%;font-size:14.5px;display:block;overflow-x:auto}
 th,td{text-align:left;padding:9px 12px;border-bottom:2px solid var(--rule)}
 th{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft)}
 td code{white-space:nowrap}
-.checks{list-style:none;padding:0;margin:0;font-size:15px}
-.checks li{padding:8px 0 8px 30px;position:relative;border-bottom:1.5px solid var(--rule)}
-.checks li::before{content:"OK";position:absolute;left:0;top:9px;
-  font:700 10px/1.5 var(--mono);color:var(--pine)}
+.checks{list-style:none;padding:0;margin:0;font-size:15.5px;max-width:62ch}
+.checks li{padding:9px 0 9px 32px;position:relative;border-bottom:1.5px solid var(--rule)}
+.checks li::before{content:"OK";position:absolute;left:0;top:10px;
+  font:700 10px/1.55 var(--mono);color:var(--pine)}
 dl{margin:0}
 dt{font:600 16px/1.4 var(--sans);margin:1.3em 0 .15em}
 dt:first-child{margin-top:0}
-dd{margin:0;color:var(--ink-soft);max-width:62ch}
-.warn{border-left:6px solid var(--oxide);background:var(--paper-2);
-  padding:14px 18px;margin:18px 0;max-width:64ch}
+dd{margin:0;color:var(--ink-soft);max-width:60ch}
+.warn{border-left:6px solid var(--oxide);background:var(--paper-2);padding:14px 18px;
+  margin:18px 0;max-width:62ch}
 .warn b{color:var(--oxide)}
 footer{padding:34px 0 56px;font-size:14.5px;color:var(--ink-soft);border-top:2.5px solid var(--ink)}
 
@@ -274,12 +248,12 @@ footer{padding:34px 0 56px;font-size:14.5px;color:var(--ink-soft);border-top:2.5
   <div class="wrap">
     <span class="brand">geng<i>/</i></span>
     <span class="chip">1 FILE</span>
-    <span class="chip">0 DEPS</span>
+    <span class="chip">0 SETUP</span>
     <nav aria-label="Primary">
-      <a href="#why">Why</a>
-      <a href="#how">How</a>
-      <a href="#learn">Learn</a>
-      <a href="#limits">Limits</a>
+      <a href="#story">The problem</a>
+      <a href="#words">How it works</a>
+      <a href="#try">Try it</a>
+      <a href="#limits">When not to</a>
       <a href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
     </nav>
   </div>
@@ -287,269 +261,346 @@ footer{padding:34px 0 56px;font-size:14.5px;color:var(--ink-soft);border-top:2.5
 
 <main id="main">
 
-<!-- ================= HERO ================= -->
+<!-- ============ 1. HERO: plain english, no jargon ============ -->
 <section>
   <div class="wrap">
-    <p class="eyebrow">Graph engineering, minus the hype</p>
-    <h1>Your agent fills its<br>context, then approves<br>its own work.</h1>
-    <p class="lede">Watch it happen on the left. On the right, the same job as a
-      graph: fresh context per step, tools granted per step, verdict held by a test
-      command.</p>
-
-    <div class="duo" style="margin-top:34px">
-      <!-- LOOP -->
-      <div class="fig" aria-hidden="true">
-        <h3 style="color:var(--oxide)">ONE LOOP</h3>
-        <div class="box hot">agent<small>plans, writes, judges</small></div>
-        <div class="ctx"><span></span></div>
-        <div class="ctx-label"><span>context</span><span>500k</span></div>
-        <div class="loop-ring"><b>&#8635;</b> pass 4, still going</div>
-        <div class="stamp">SHIPPED IT<em>same agent, same opinion</em></div>
-      </div>
-      <!-- GRAPH -->
-      <div class="fig" aria-hidden="true">
-        <h3 style="color:var(--pine)">ONE GRAPH</h3>
-        <div class="chain">
-          <div class="box ro">plan<small>no write tools</small></div>
-          <div class="tick">&#8595;</div>
-          <div class="box">implement<small>own checkout</small></div>
-          <div class="tick">&#8595;</div>
-          <div class="box gate">npm test<small>the gate</small></div>
-          <div class="tick">&#8595;</div>
-          <div class="box ro">review<small>no write tools</small></div>
-        </div>
-        <div class="verdict">EXIT 0<em>a command said so, not an agent</em></div>
-      </div>
-    </div>
-    <p class="fig-cap">Left: one window, four passes, self assessment.
-      Right: four windows, one verdict from outside.</p>
-
-    <div class="copywrap" style="margin-top:26px">
-<pre><code>curl -O https://raw.githubusercontent.com/AdityaIndoori/graph-engineering/main/geng.py
-python geng.py run examples/smoke.toml</code></pre>
-      <button type="button" data-copy>Copy</button>
-    </div>
-
+    <p class="eyebrow">A small tool for people who code with AI</p>
+    <h1>Give an AI one job<br>at a time.</h1>
+    <p class="lede">Ask an AI to do a big coding task all at once and two things go
+      wrong: it loses track of what it did, and then it tells you everything went
+      fine. geng splits the task into small steps and puts a real test in charge of
+      deciding whether it worked.</p>
     <div class="row">
-      <a class="btn fill" href="https://github.com/AdityaIndoori/graph-engineering">Get it on GitHub</a>
-      <a class="btn ghost" href="#learn">Start the tutorial</a>
+      <a class="btn fill" href="#story">Show me the problem</a>
+      <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
     </div>
   </div>
 </section>
 
-<!-- ================= WHY ================= -->
-<section id="why">
+<!-- ============ 2. THE STORY: one example, carried all the way down ============ -->
+<section id="story">
   <div class="wrap">
-    <p class="eyebrow">The part that is not a rename</p>
-    <h2>A step with no write tool<br>cannot write.</h2>
-    <p class="narrow">The usual way to build a refund bot: list ten checks in the
-      prompt, then hand the agent a refund tool. You just gave it the power to move
-      money, plus a note about when to use it.</p>
+    <p class="step-no">PART 1 / WHAT GOES WRONG</p>
+    <h2>Say you ask an AI to<br>build a refund button.</h2>
+    <p class="narrow">Refunds send real money back to a customer, so it has rules.
+      The order must exist. It must be recent enough. The customer must not have
+      been refunded already.</p>
+    <p class="narrow">So you write one long instruction: <em>check all of these
+      things, and if they pass, send the refund.</em> You hand the AI the code, the
+      rules, and the ability to move money. Then you let it work.</p>
+
+    <div class="fig" style="margin-top:26px">
+      <div class="duo">
+        <div>
+          <h3 style="color:var(--oxide)">WHAT ACTUALLY HAPPENS</h3>
+          <div class="box hot" aria-hidden="true">the AI<small>reading, writing, and checking its own work</small></div>
+          <div class="ctx" aria-hidden="true"><span></span></div>
+          <div class="ctx-label" aria-hidden="true"><span>its memory of this task</span><span>full</span></div>
+          <div class="loop-ring" aria-hidden="true"><b>&#8635;</b> attempt 4, still going</div>
+          <div class="stamp" aria-hidden="true">ALL DONE<em>said by the same AI that wrote it</em></div>
+        </div>
+        <div>
+          <h3>THE TWO PROBLEMS</h3>
+          <p style="font-size:15.5px;margin-bottom:14px"><b style="color:var(--oxide)">1. It runs out of room.</b>
+            An AI can only hold so much of a conversation at once. Every attempt adds
+            more. By attempt four it has genuinely forgotten what it decided in
+            attempt one, so it starts contradicting itself.</p>
+          <p style="font-size:15.5px;margin:0"><b style="color:var(--oxide)">2. It marks its own homework.</b>
+            The same AI that wrote the refund code is the one deciding whether the
+            refund code is correct. It says yes. It usually says yes.</p>
+        </div>
+      </div>
+      <p class="fig-cap">The bar is the AI's working memory filling up. The stamp
+        lands while the bar is full, which is the whole problem in one picture.</p>
+    </div>
+
+    <p class="narrow">And there is a third thing, quieter and worse. To do that job
+      in one go, the AI needed the power to send refunds <em>the entire time</em>,
+      including while it was still figuring out whether a refund was allowed.</p>
+    <p class="narrow"><b>You gave it the keys and a note asking it to be careful.</b></p>
+  </div>
+</section>
+
+<!-- ============ 3. THE FIX, same example ============ -->
+<section>
+  <div class="wrap">
+    <p class="step-no">PART 2 / THE FIX</p>
+    <h2>Split it into steps, and<br>hand out tools per step.</h2>
+    <p class="narrow">Same refund job, done as two separate runs of the AI instead of
+      one. The first decides. The second acts. And here is the important part: the
+      first one <b>does not have the refund tool at all</b>.</p>
 
     <div class="fig" style="margin-top:24px">
       <div class="perm">
         <div class="pane">
           <h4 style="color:var(--slate)">STEP 1 / DECIDE</h4>
-          <div class="tool on"><b>+</b> read order</div>
-          <div class="tool on"><b>+</b> read customer</div>
-          <div class="tool off"><b>&times;</b> issue refund</div>
+          <div class="tool on" aria-hidden="true"><b>+</b> look up the order</div>
+          <div class="tool on" aria-hidden="true"><b>+</b> look up the customer</div>
+          <div class="tool off" aria-hidden="true"><b>&times;</b> send a refund</div>
         </div>
-        <div class="pgate">GATE<br>eligible?</div>
+        <div class="pgate" aria-hidden="true">CHECK<br>allowed?</div>
         <div class="pane">
           <h4 style="color:var(--oxide)">STEP 2 / ACT</h4>
-          <div class="tool on"><b>+</b> read order</div>
-          <div class="tool armed"><b>+</b> issue refund</div>
+          <div class="tool on" aria-hidden="true"><b>+</b> look up the order</div>
+          <div class="tool armed" aria-hidden="true"><b>+</b> send a refund</div>
         </div>
       </div>
-      <p class="fig-cap">The refund tool does not exist in step 1. It arrives in
-        step 2, after the check passed, scoped to one customer and usable once.</p>
+      <p class="fig-cap">Watch the red row appear. Step 1 physically cannot send
+        money, however confused it gets. That ability shows up in step 2, only after
+        the check in the middle passed.</p>
     </div>
+
+    <p class="narrow">Compare the two versions honestly. In the first, the AI is
+      <em>asked</em> to behave. In the second, misbehaving is not available. That is
+      the difference between a rule and a locked door, and it is the real reason to
+      bother with any of this.</p>
+    <p class="narrow">Both problems from Part 1 are gone too. Each step starts with a
+      clean memory, holding only what it was handed. And the check in the middle is
+      not an AI having an opinion, it is a program: it runs your tests and either
+      passes or fails.</p>
   </div>
 </section>
 
-<!-- ================= HOW ================= -->
-<section id="how">
+<!-- ============ 4. VOCABULARY, only now, tied to the picture ============ -->
+<section id="words">
   <div class="wrap">
-    <p class="eyebrow">Three rules, whole model</p>
-    <h2>Node, edge, verdict.</h2>
-    <div class="grid3" style="margin-bottom:30px">
-      <div class="card"><div class="num">NODE</div><h4>A subprocess</h4>
-        <p>One run of one command line. Any agent CLI, or any plain shell command.</p></div>
-      <div class="card"><div class="num">EDGE</div><h4>A file</h4>
-        <p>A node's output lands on disk and drops into the next node's prompt.</p></div>
-      <div class="card"><div class="num">VERDICT</div><h4>The exit code</h4>
-        <p>Zero is success. Never the agent's own JSON, for the reason below.</p></div>
+    <p class="step-no">PART 3 / FOUR WORDS</p>
+    <h2>Names for what you<br>have already seen.</h2>
+    <p class="narrow">You understood the idea from the two pictures. These are just
+      the labels, so the rest of the page has something to call them.</p>
+
+    <div class="grid3" style="margin-top:22px">
+      <div class="card"><div class="num">STEP</div>
+        <h4>One run of one thing</h4>
+        <p>&ldquo;Decide&rdquo; was a step. Running your tests was a step. It can be
+          an AI or an ordinary program.</p></div>
+      <div class="card"><div class="num">HAND-OFF</div>
+        <h4>A saved file</h4>
+        <p>A step's answer gets written to a file, and the next step's instructions
+          include that text. You can open it and read it.</p></div>
+      <div class="card"><div class="num">VERDICT</div>
+        <h4>A number, not an opinion</h4>
+        <p>Programs report <code>0</code> when they finish fine, and something else
+          when they do not. geng believes that number.</p></div>
+      <div class="card"><div class="num">GATE</div>
+        <h4>A step that can stop everything</h4>
+        <p>The &ldquo;CHECK / allowed?&rdquo; box. Mark a step as a gate and a
+          failure there halts the whole run.</p></div>
     </div>
 
-    <div class="duo">
+    <p class="narrow" style="margin-top:22px">Why a number and not the AI's own
+      summary of how it went? Because <b>Cursor prints nothing readable when it
+      breaks, Kiro and aider have no summary option at all, and Claude, Codex and
+      Gemini each use a different format.</b> All nine tools report the number. It is
+      the one thing they agree on, which is why geng works with any of them.</p>
+  </div>
+</section>
+
+<!-- ============ 5. THE FILE: now readable, because the words are known ============ -->
+<section>
+  <div class="wrap">
+    <p class="step-no">PART 4 / WRITING IT DOWN</p>
+    <h2>The whole thing is<br>one small text file.</h2>
+    <p class="narrow">You list your steps in a plain text file, and geng runs them in
+      order. Here is the refund example from Part 2, written out. Read the comments
+      in grey and it should say something you already understand.</p>
+
+    <div class="duo" style="margin-top:22px">
       <div>
-        <h3>The graph above, written down</h3>
-<pre><span class="c"># how to run something</span>
-<b>[agents.dev]</b>
-argv = ["claude", "-p"]
+        <h3>refund.toml</h3>
+<pre><span class="c"># Describe a way of running an AI. This one can</span>
+<span class="c"># read files, but has no power to send money.</span>
+<b>[agents.checker]</b>
+argv = ["claude", "-p", "--allowedTools", "Read"]
 
-<span class="c"># what to run</span>
-<b>[nodes.implement]</b>
-agent   = "dev"
-<u>isolate = true</u>       <span class="c"># own checkout</span>
-prompt  = "Add request-id logging."
+<span class="c"># A plain command, not an AI.</span>
+<b>[agents.shell]</b>
+argv = ["bash", "-lc", "{prompt}"]
 
-<b>[nodes.verify]</b>
-needs  = ["implement"]  <span class="c"># the edge</span>
-<u>gate   = true</u>          <span class="c"># stops the run</span>
+<span class="c"># Step one: decide. No refund tool here.</span>
+<b>[nodes.decide]</b>
+agent  = "checker"
+prompt = "Is order 4471 refundable? Answer YES or NO."
+
+<span class="c"># Step two: the check. If it fails, stop.</span>
+<b>[nodes.tests]</b>
+needs  = ["decide"]  <span class="c"># wait for step one</span>
+agent  = "shell"
+<span class="y">gate   = true</span>        <span class="c"># the stop sign</span>
 prompt = "npm test"</pre>
+        <p style="font-size:15px;color:var(--ink-soft)">The word geng uses for a step
+          is <code>node</code>, which is why the headings say
+          <code>[nodes.decide]</code>.</p>
       </div>
       <div>
-        <h3>What you see</h3>
-<pre><span class="c">$ python geng.py run graph.toml</span>
+        <h3>What you see when you run it</h3>
+<pre><span class="c">$ python geng.py run refund.toml</span>
 
-wave 1  (1 node, 4 at a time)
-  <span class="g">ok</span>   implement
-wave 2  (1 node, 4 at a time)
-  <span class="r">GATE</span> verify exit=1
+wave 1  (1 node(s), 4 at a time)
+  <span class="g">ok</span>   decide
 
-halted: gate failed: verify</pre>
-        <p style="font-size:15px;color:var(--ink-soft)">Swap <code>claude -p</code>
-          for <code>codex exec</code> and nothing else moves. One line is the whole
-          portability story.</p>
+wave 2  (1 node(s), 4 at a time)
+  <span class="r">FAIL</span> tests exit=1 <span class="c">.geng/log/tests.log</span>
+
+halted: gate node(s) failed: tests</pre>
+        <p style="font-size:15.5px;color:var(--ink-soft)">The tests failed, so geng
+          stopped instead of carrying on to anything that touches money. If they had
+          passed, it would have moved to the next step. &ldquo;Wave&rdquo; is just
+          geng's word for a round of steps.</p>
+        <p style="font-size:15.5px;color:var(--ink-soft)">Swap <code>claude</code> for
+          the name of whichever AI tool you use, and nothing else in the file
+          changes.</p>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ================= EXIT CODE ================= -->
-<section>
+<!-- ============ 6. TRY IT: earliest possible hands-on ============ -->
+<section id="try">
   <div class="wrap">
-    <p class="eyebrow">Why not read the agent's JSON</p>
-    <h2>Because it goes missing<br>exactly when you need it.</h2>
-    <table style="max-width:640px;margin-top:20px">
-      <thead><tr><th>Harness</th><th>JSON on failure</th></tr></thead>
-      <tbody>
-        <tr><td>Cursor</td><td style="color:var(--oxide)">none emitted</td></tr>
-        <tr><td>Kiro, aider</td><td style="color:var(--oxide)">no JSON mode at all</td></tr>
-        <tr><td>Claude, Codex, Gemini</td><td style="color:var(--ochre)">three incompatible shapes</td></tr>
-        <tr><td>all nine of them</td><td style="color:var(--pine)"><b>an exit code</b></td></tr>
-      </tbody>
-    </table>
-    <p class="narrow" style="margin-top:18px">So the exit code is the verdict. Your
-      agent's JSON still flows to the next node as data. It just never decides
-      whether a step worked.</p>
-  </div>
-</section>
-
-<!-- ================= WAVES ================= -->
-<section>
-  <div class="wrap">
-    <p class="eyebrow">Scheduling</p>
-    <h2>Independent steps share a row.</h2>
-    <div class="fig" style="margin-top:22px">
-      <div class="waves" aria-hidden="true">
-        <div class="wave w1"><span class="lab">WAVE 1</span>
-          <div class="box">audit api</div><div class="box">audit web</div><div class="box">audit docs</div></div>
-        <div class="wave w2"><span class="lab">WAVE 2</span>
-          <div class="box">merge findings</div></div>
-        <div class="wave w3"><span class="lab">WAVE 3</span>
-          <div class="box gate">typecheck + test</div></div>
-      </div>
-      <div class="clock">
-        <span>three 2s steps, run together: <b>2.3s</b></span>
-        <span>run one after another: <s>6s</s></span>
-      </div>
-      <p class="fig-cap">geng groups everything with satisfied dependencies into one
-        wave. Row 2 waits for all of row 1.</p>
-    </div>
-    <p class="narrow">Run it twice and the second run reports <code>cached</code> in
-      a fifth of a second. Change one prompt and only that step and the ones after
-      it repeat, because each key is a hash of its prompt, its command, and its
-      ancestors.</p>
-  </div>
-</section>
-
-<!-- ================= ISOLATION ================= -->
-<section>
-  <div class="wrap">
-    <p class="eyebrow">Parallel writers</p>
-    <h2>Two steps, one file,<br>no collision.</h2>
-    <div class="fig" style="margin-top:22px">
-      <div class="tracks" aria-hidden="true">
-        <div class="track t1"><span class="name">geng/api</span>
-          <span class="rail"><i></i><em>ctx.log</em></span></div>
-        <div class="track t2"><span class="name">geng/web</span>
-          <span class="rail"><i></i><em>ctx.log</em></span></div>
-        <div class="track trunk"><span class="name">your branch</span>
-          <span class="rail"><em>untouched</em></span></div>
-      </div>
-      <p class="fig-cap"><code>isolate = true</code> gives each step its own git
-        worktree and branch. Work commits only if the step passed, so a broken
-        attempt never looks reviewable.</p>
-    </div>
-    <p class="narrow">Then merge the branch you like. The one rule: one file, one
-      owner. Worktrees prevent collisions, not disagreements.</p>
-  </div>
-</section>
-
-<!-- ================= LEARN ================= -->
-<section id="learn">
-  <div class="wrap">
-    <p class="eyebrow">Four paths in</p>
-    <h2>Learn it in an hour,<br>or let an agent write it.</h2>
-    <div class="grid3" style="margin-top:24px">
-      <div class="card">
-        <div class="num">01 / BY HAND</div>
-        <h4>Empty file to working graph</h4>
-        <p>One node, then edges, a gate, parallel steps, isolation. Uses Python as a
-          stand in, so the first four parts cost nothing.</p>
-        <div class="row" style="margin-top:14px">
-          <a class="btn ghost" style="min-height:44px;font-size:14px"
-             href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">Tutorial</a>
-        </div>
-      </div>
-      <div class="card">
-        <div class="num">02 / REAL AGENT</div>
-        <h4>With omp or Claude Code</h4>
-        <p>Same patterns, live. Includes which flags form a real read only boundary
-          and which only look like one.</p>
-        <div class="row" style="margin-top:14px">
-          <a class="btn ghost" style="min-height:44px;font-size:14px"
-             href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_OMP.md">omp</a>
-          <a class="btn ghost" style="min-height:44px;font-size:14px"
-             href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_CLAUDE.md">Claude</a>
-        </div>
-      </div>
-      <div class="card">
-        <div class="num">03 / IN ENGLISH</div>
-        <h4>Let the agent write the TOML</h4>
-        <p>Describe the job, get a spec, validate before it runs. Needs one context
-          file, because the name collides with a Rust crate and agents otherwise
-          guess.</p>
-        <div class="row" style="margin-top:14px">
-          <a class="btn ghost" style="min-height:44px;font-size:14px"
-             href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_AI_WRITES_IT.md">How</a>
-          <a class="btn ghost" style="min-height:44px;font-size:14px"
-             href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/GENG_FOR_AI.md">Context file</a>
-        </div>
-      </div>
-    </div>
-
-    <h3 style="margin-top:36px">Before any real run, look at the commands</h3>
+    <p class="step-no">PART 5 / YOUR TURN</p>
+    <h2>Run one yourself,<br>with no AI needed.</h2>
+    <p class="narrow">You need Python and nothing else. The example below fakes its
+      AI steps with tiny Python snippets, so you can watch the machinery work
+      without signing up for anything or spending a cent.</p>
     <div class="copywrap">
-<pre><code>python geng.py plan graph.toml       # diagram and waves, runs nothing
-python geng.py run graph.toml --dry-run   # exact command per node</code></pre>
+<pre><code>git clone https://github.com/AdityaIndoori/graph-engineering
+cd graph-engineering
+python geng.py run examples/smoke.toml</code></pre>
       <button type="button" data-copy>Copy</button>
     </div>
-    <p class="narrow" style="font-size:15px;color:var(--ink-soft)">
-      <code>--dry-run</code> writes nothing, spends nothing, and prints the precise
-      command each node would execute. Last checkpoint before an agent touches your
-      repository.</p>
+    <p class="narrow">You should see <code>6/6 ok</code>. Six steps ran, three of them
+      at the same time, one gate checked the result, and one step deliberately failed
+      twice before working, to show you what a retry looks like.</p>
+    <p class="narrow">That is the whole thing. You read the output, and that is all
+      you have to do. Nothing is running in the background afterwards, and nothing was
+      installed.</p>
+    <p class="narrow">Then run the exact same command again. Everything now reports
+      <code>cached</code> in under a second, because geng wrote down which steps
+      already worked and does not redo them. Open <code>examples/smoke.toml</code> in
+      any text editor, change one of the messages, run it a third time, and watch only
+      that step and the ones after it repeat.</p>
+    <div class="defbox" style="border-color:var(--ochre);border-left-color:var(--ochre)">
+      <b style="color:var(--ochre)">WHEN A STEP FAILS</b>
+      <p>It prints <code>FAIL</code> along with the path to a log file. Open that
+      file: it holds the exact command that ran and everything the command printed,
+      which is nearly always enough to see what went wrong.</p>
+    </div>
   </div>
 </section>
 
-<!-- ================= HARNESS ================= -->
+<!-- ============ 7. PARALLEL, as a payoff not a feature ============ -->
 <section>
   <div class="wrap">
-    <p class="eyebrow">Bring your own</p>
-    <h2>Nine harnesses, one line each.</h2>
-    <table style="max-width:660px;margin-top:18px">
+    <p class="step-no">PART 6 / A BONUS</p>
+    <h2>Steps that do not wait<br>on each other run together.</h2>
+    <p class="narrow">You did not ask for this, you get it anyway. If three steps do
+      not need each other's answers, geng starts all three at once and only waits
+      when something actually depends on something else.</p>
+    <div class="fig" style="margin-top:22px">
+      <div class="waves" aria-hidden="true">
+        <div class="wave w1"><span class="lab">ROUND 1</span>
+          <div class="box">check the login code</div>
+          <div class="box">check the database code</div>
+          <div class="box">check the docs</div></div>
+        <div class="wave w2"><span class="lab">ROUND 2</span>
+          <div class="box">write one report from all three</div></div>
+        <div class="wave w3"><span class="lab">ROUND 3</span>
+          <div class="box gate">run the tests</div></div>
+      </div>
+      <div class="clock">
+        <span>three 2-second steps together: <b>2.3s</b></span>
+        <span>one after another: <s>6s</s></span>
+      </div>
+      <p class="fig-cap">Round 2 needs all three answers, so it waits. Round 3 is the
+        gate. geng works out the rounds for you from what each step says it needs.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 8. ISOLATION, explained in plain terms ============ -->
+<section>
+  <div class="wrap">
+    <p class="step-no">PART 7 / KEEPING THINGS SAFE</p>
+    <h2>Two AIs editing one file<br>without ruining it.</h2>
+    <p class="narrow">If two steps edit the same file at the same time, they overwrite
+      each other and you get nonsense. So geng can give a step its own private copy
+      of your project to work in.</p>
+    <div class="defbox">
+      <b>WHY THIS IS EASY</b>
+      <p>If you use <b>git</b> to store your code, it already knows how to keep
+      several copies of a project side by side. geng just asks git to make one per
+      step. If you do not use git, skip this part: everything else still works.</p>
+    </div>
+    <div class="fig" style="margin-top:20px">
+      <div class="tracks" aria-hidden="true">
+        <div class="track t1"><span class="name">copy for step A</span>
+          <span class="rail"><i></i><em>editing</em></span></div>
+        <div class="track t2"><span class="name">copy for step B</span>
+          <span class="rail"><i></i><em>editing</em></span></div>
+        <div class="track trunk"><span class="name">your own files</span>
+          <span class="rail"><em>not touched</em></span></div>
+      </div>
+      <p class="fig-cap">Both steps write freely in their own copy. Your files stay
+        exactly as you left them, and a step that fails leaves nothing behind, so a
+        broken attempt never looks like finished work.</p>
+    </div>
+    <p class="narrow">Afterwards you look at each copy and keep the one you like.</p>
+  </div>
+</section>
+
+<!-- ============ 10. LEARN ============ -->
+<section>
+  <div class="wrap">
+    <p class="step-no">PART 8 / GOING FURTHER</p>
+    <h2>Three ways to keep going.</h2>
+    <div class="grid3" style="margin-top:22px">
+      <div class="card">
+        <div class="num">START HERE</div>
+        <h4>Build one by hand</h4>
+        <p>Empty file to working setup, explaining every line. The first half needs
+          no AI tool, so it costs nothing to follow.</p>
+        <div class="row" style="margin-top:14px">
+          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL.md">Tutorial</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="num">WITH A REAL AI</div>
+        <h4>Using omp or Claude Code</h4>
+        <p>The same steps driving an actual AI, including which settings really do
+          take away its ability to edit files, and which only look like they do.</p>
+        <div class="row" style="margin-top:14px">
+          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_OMP.md">omp</a>
+          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_CLAUDE.md">Claude</a>
+        </div>
+      </div>
+      <div class="card">
+        <div class="num">THE LAZY WAY</div>
+        <h4>Have the AI write the file</h4>
+        <p>Describe the job in normal English and let an AI write the setup file for
+          you, then check it before it runs. Needs one extra file so the AI knows the
+          format instead of guessing.</p>
+        <div class="row" style="margin-top:14px">
+          <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_AI_WRITES_IT.md">How</a>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:34px">Two commands worth knowing first</h3>
+    <div class="copywrap">
+<pre><code>python geng.py plan graph.toml            # draws the steps, runs nothing
+python geng.py run graph.toml --dry-run  # shows the exact commands, runs nothing</code></pre>
+      <button type="button" data-copy>Copy</button>
+    </div>
+    <p class="narrow" style="font-size:15.5px;color:var(--ink-soft)">Both of these
+      change nothing and cost nothing. Use the second one before any real run: it
+      prints exactly what each step would do, which is your last chance to notice a
+      mistake.</p>
+
+    <h3 style="margin-top:30px">Works with the AI tool you already use</h3>
+    <p class="narrow" style="font-size:15.5px;color:var(--ink-soft)">One line per
+      tool, and that line is the only thing you change to switch.</p>
+    <table style="max-width:640px">
       <tbody>
         <tr><td>Claude Code</td><td><code>["claude", "-p"]</code></td></tr>
         <tr><td>Oh My Pi</td><td><code>["omp", "-p", "--no-session"]</code></td></tr>
@@ -562,95 +613,125 @@ python geng.py run graph.toml --dry-run   # exact command per node</code></pre>
         <tr><td>aider</td><td><code>["aider", "--yes-always", "--message"]</code></td></tr>
       </tbody>
     </table>
-    <p class="narrow" style="margin-top:16px">Each gets a read only twin, which is
-      how the boundary from earlier gets enforced.</p>
-<pre style="max-width:660px"><b>[agents.review]</b>
-argv = ["claude", "-p", "--allowedTools", "Read,Grep,Glob"]</pre>
-    <div class="warn"><b>Two traps, both found by testing rather than reading.</b>
-      For omp the read only boundary is <code>--approval-mode always-ask</code>;
-      <code>--tools</code> looks like it restricts capability and does not. For gate
-      nodes skip <code>bash -lc</code>: on Windows with WSL installed and no distro
-      it resolves to a stub that fails, so your gate fails for a reason unrelated to
-      your tests.</div>
   </div>
 </section>
 
-<!-- ================= LIMITS ================= -->
+<!-- ============ 11. LIMITS, in plain speech ============ -->
 <section id="limits">
   <div class="wrap">
-    <p class="eyebrow">Read this before you adopt it</p>
-    <h2>Most jobs want a loop.</h2>
-    <div class="grid3" style="margin-top:22px">
-      <div class="card"><div class="num">TRIGGER 1</div><h4>Context rot</h4>
-        <p>One window is hitting 300k to 500k tokens per pass.</p></div>
-      <div class="card"><div class="num">TRIGGER 2</div><h4>Real review</h4>
-        <p>The stakes rule out the author being the judge.</p></div>
-      <div class="card"><div class="num">TRIGGER 3</div><h4>Wall clock</h4>
-        <p>Independent work is queued behind itself for no reason.</p></div>
+    <p class="step-no">PART 9 / BE HONEST</p>
+    <h2>Most jobs do not<br>need any of this.</h2>
+    <p class="narrow">If you are asking an AI to fix one function or write one file,
+      just ask it. Splitting that into steps is extra work for no gain, and this page
+      is not trying to talk you into it.</p>
+    <p class="narrow">It starts paying off in three situations:</p>
+    <div class="grid3" style="margin-top:20px">
+      <div class="card"><div class="num">1</div><h4>The job is too big to remember</h4>
+        <p>Many files, many decisions, and the AI keeps forgetting earlier ones.</p></div>
+      <div class="card"><div class="num">2</div><h4>You need a real check</h4>
+        <p>It matters too much to let the AI that wrote it be the one to approve it.</p></div>
+      <div class="card"><div class="num">3</div><h4>You are waiting around</h4>
+        <p>Jobs that have nothing to do with each other are running one by one.</p></div>
     </div>
-    <p class="big" style="margin:30px 0 10px">None of those? Keep your loop.</p>
-    <p class="narrow">A graph costs you several prompts instead of one, a state
-      schema between steps, and a fresh class of routing bugs. Agents burn about
-      4&times; the tokens of chat, multi agent setups about 15&times;. Anthropic's
-      own guidance: most coding tasks have fewer truly parallel parts than research
-      does.</p>
-    <div class="warn"><b>The risk that actually bites is agreement.</b> Twenty
-      agents on one model reading one flawed context will agree at scale. A graph
-      multiplies a shared mistake as efficiently as good work. The only defence is
-      an edge touching reality, tests that ran or a build that compiled, which is
-      what a gate is for and why a second reviewer belongs on a different model.
-      Your review bandwidth is the ceiling, not the concurrency limit.</div>
+
+    <div class="warn" style="margin-top:26px"><b>And a trap worth knowing about.</b>
+      Think of asking ten classmates to check your homework, except all ten
+      copied from the same wrong textbook. They will all agree with you, and it will
+      feel like ten confirmations. It is really only one.
+      <br><br>AI steps do exactly this. Ten steps using the same AI, reading the same
+      wrong information, reach the same wrong answer and agree. So the deciding step
+      should be a real test rather than another AI, and if you do want a second
+      opinion, get it from a <em>different</em> AI.</div>
+    <p class="narrow">Two other honest costs: running several AI steps costs several
+      times what asking once costs, and you still have to read what they did. That
+      reading is usually the real limit, not the tool.</p>
   </div>
 </section>
 
-<!-- ================= PROOF ================= -->
+<!-- ============ 12. PROOF ============ -->
 <section>
   <div class="wrap">
-    <p class="eyebrow">53 tests, 3 platforms, 3 Python versions</p>
-    <h2>Claims with receipts.</h2>
-    <ul class="checks narrow" style="margin-top:18px">
-      <li>Editing one prompt invalidates that step and its descendants, nothing else.</li>
-      <li>A failed gate halts the run; dependents skip rather than run.</li>
-      <li>An undeclared placeholder fails its node instead of rendering empty.</li>
-      <li>Two isolated steps writing one file commit to separate branches.</li>
-      <li>A failed isolated step publishes no commit.</li>
-      <li>A second concurrent run is refused, not allowed to corrupt state.</li>
-      <li><code>--dry-run</code> leaves no artifacts, no state, no worktrees.</li>
+    <p class="step-no">PART 10 / DOES IT ACTUALLY WORK</p>
+    <h2>53 automatic tests say yes.</h2>
+    <p class="narrow">These run on Windows, Mac and Linux every time the code changes.
+      They check the promises made on this page, so you do not have to take my word
+      for any of them:</p>
+    <ul class="checks" style="margin-top:16px">
+      <li>Change one step's instructions and only that step, plus whatever came after
+        it, runs again.</li>
+      <li>When a gate fails, everything after it is skipped instead of quietly
+        running anyway.</li>
+      <li>Two steps writing the same file end up in separate copies, and your own
+        files are untouched.</li>
+      <li>A step that fails leaves nothing saved, so you cannot mistake it for
+        finished work.</li>
+      <li>Starting a second run while one is going is refused, rather than scrambling
+        both.</li>
+      <li><code>--dry-run</code> genuinely writes nothing at all.</li>
     </ul>
     <div class="row">
+      <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/geng.py">Read the whole tool</a>
       <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/tests/test_geng.py">Read the tests</a>
-      <a class="btn ghost" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/geng.py">Read the tool</a>
       <a class="btn ghost" href="pitch.html">Nine slides</a>
     </div>
+    <p class="narrow" style="margin-top:16px;font-size:15.5px;color:var(--ink-soft)">
+      It is one file, about 600 lines, and it uses nothing but what Python already
+      ships with. You can read the entire thing in an afternoon.</p>
   </div>
 </section>
 
-<!-- ================= FAQ ================= -->
+<!-- ============ 13. FAQ ============ -->
 <section>
   <div class="wrap">
     <p class="eyebrow">Short answers</p>
-    <h2>Likely questions.</h2>
+    <h2>Questions people<br>actually ask.</h2>
     <dl class="narrow" style="margin-top:20px">
-      <dt>Is graph engineering just a rename?</dt>
-      <dd>Mostly. The term is days old and started as a tweet; the structure is 19
-        months older, and Anthropic ships it as dynamic workflows without using the
-        word. Per step capability is the part that is new.
-        <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/BACKGROUND.md">Background</a>.</dd>
-      <dt>Why not LangGraph, Temporal, Make, Actions?</dt>
-      <dd>Use them if you run them already, they are all more capable. None is one
-        file you drop beside a repo with no infrastructure.</dd>
-      <dt>Do I need git?</dt>
-      <dd>Only for isolated steps. The rest works without it, and the tests skip
-        their git cases when it is absent.</dd>
-      <dt>Why no pip install?</dt>
-      <dd>The premise is one file, no dependencies. A package would contradict it.</dd>
-      <dt>Can one graph mix vendors?</dt>
-      <dd>Yes, and that is the point of the second reviewer. A different model is
-        the cheapest defence against agreement.</dd>
-      <dt>Is someone else's spec safe to run?</dt>
-      <dd>No more than their Makefile is. A spec is executable code.
-        <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/SECURITY.md">Security notes</a>.</dd>
+      <dt>What if I do not have Python?</dt>
+      <dd>Install it from python.org, version 3.11 or newer. That is the only thing
+        geng needs. There is no package to install after that, on purpose: geng is a
+        single file you copy next to your project and delete when you are done.</dd>
+
+      <dt>Can I use this with ChatGPT?</dt>
+      <dd>Not the website, no. geng runs programs, so it needs an AI that runs as a
+        command on your computer. The nine in the list above all do. If you only use
+        AI through a browser tab, this tool has nothing to drive.</dd>
+
+      <dt>How do I know if the file I wrote is correct?</dt>
+      <dd>Run <code>python geng.py plan yourfile.toml</code>. It draws your steps and
+        runs nothing, and it refuses the file with an error if you referred to a step
+        that does not exist or made two steps wait on each other forever. Then
+        <code>--dry-run</code> shows the exact commands before any of them happen.</dd>
+
+      <dt>What does it look like when something goes wrong?</dt>
+      <dd>The failing step prints <code>FAIL</code> with the path to a log file, and
+        that file holds the exact command it ran and everything the command printed.
+        Fix the cause, run the same command again, and the steps that already worked
+        are skipped.</dd>
+
+      <dt>What does it cost?</dt>
+      <dd>geng is free. The AI steps cost whatever your AI tool charges, and running
+        four steps costs about four times running one. You can cap how many run at
+        once, and <code>--dry-run</code> costs nothing at all.</dd>
+
+      <dt>Do I need to know git?</dt>
+      <dd>Only for the private-copies idea in Part 7. Everything else works without
+        it.</dd>
+
+      <dt>Is this just a fancy name for something old?</dt>
+      <dd>Honestly, mostly. People started calling this &ldquo;graph
+        engineering&rdquo; a few weeks ago, but the shape of it is years old and
+        bigger tools do it too. The genuinely useful part is handing out tools per
+        step, which is Part 2.
+        <a href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/BACKGROUND.md">Longer version</a>.</dd>
+
+      <dt>Is it safe to run a file someone sent me?</dt>
+      <dd>No safer than running any script a stranger sends you. These files run real
+        commands on your computer, so read one before you run it.</dd>
     </dl>
+    <div class="row">
+      <a class="btn fill" href="https://github.com/AdityaIndoori/graph-engineering">Get it on GitHub</a>
+      <a class="btn ghost" href="#try">Run the example</a>
+    </div>
   </div>
 </section>
 
@@ -658,7 +739,7 @@ argv = ["claude", "-p", "--allowedTools", "Read,Grep,Glob"]</pre>
 
 <footer>
   <div class="wrap">
-    <p><strong>geng</strong> / MIT licensed, by
+    <p><strong>geng</strong> / free and open source, by
       <a href="https://github.com/AdityaIndoori">Aditya Indoori</a>.
       <a href="https://github.com/AdityaIndoori/graph-engineering">Source and issues</a>.</p>
     <p>Built because a video about graph engineering was worth taking seriously, and
