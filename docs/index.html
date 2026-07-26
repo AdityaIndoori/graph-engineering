@@ -225,6 +225,7 @@ footer{padding:30px 0 50px;font-size:14px;color:var(--ink-soft);border-top:2.5px
       <a href="#problem">Problem</a>
       <a href="#fix">Fix</a>
       <a href="#try">Try it</a>
+      <a href="#learn">Tutorials</a>
       <a href="#limits">When not to</a>
       <a href="https://github.com/AdityaIndoori/graph-engineering">GitHub</a>
     </nav>
@@ -461,7 +462,7 @@ python geng.py run examples/smoke.toml</code></pre>
 </section>
 
 <!-- LEARN -->
-<section>
+<section id="learn">
   <div class="wrap">
     <p class="no">PART 8 / GOING FURTHER</p>
     <h2>Three ways in.</h2>
@@ -476,11 +477,31 @@ python geng.py run examples/smoke.toml</code></pre>
         <div class="row" style="margin-top:12px">
           <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_OMP.md">omp</a>
           <a class="btn ghost sm" href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_CLAUDE.md">Claude</a></div></div>
-      <div class="card"><div class="num">THE LAZY WAY</div><h4>Let an AI write it</h4>
+      <div class="card"><div class="num">THE AI WAY</div><h4>Let an AI write it</h4>
         <p>Describe the job in English, get the file, check it before it runs.</p>
         <div class="row" style="margin-top:12px"><a class="btn ghost sm"
           href="https://github.com/AdityaIndoori/graph-engineering/blob/main/docs/TUTORIAL_AI_WRITES_IT.md">How</a></div></div>
     </div>
+
+    <h3 style="margin-top:26px">The AI way: paste this, fill in the blank</h3>
+    <p class="cap" style="margin:0 0 12px">Your AI has never heard of geng, so the
+      two links teach it the format. Replace the last line with your own job.</p>
+    <div class="copywrap">
+<pre><code>Read these two files first:
+https://raw.githubusercontent.com/AdityaIndoori/graph-engineering/main/docs/GENG_FOR_AI.md
+https://raw.githubusercontent.com/AdityaIndoori/graph-engineering/main/geng.py
+
+Then write me a geng TOML spec, and nothing else, that:
+&lt;describe your job here, for example: audits every file in src/ for missing
+error handling, then writes tests for what it finds, then runs pytest as a gate&gt;
+
+Rules: put review and planning steps on a read-only agent, end with a gate that
+runs a real test command, and only use placeholders from a step's own needs.</code></pre>
+      <button type="button" data-copy>Copy</button>
+    </div>
+    <p class="cap">Then check it before it runs:
+      <code>python geng.py plan yourfile.toml</code> draws it and refuses broken
+      files, and <code>--dry-run</code> shows the exact commands.</p>
 
     <div class="duo" style="margin-top:26px">
       <div>
